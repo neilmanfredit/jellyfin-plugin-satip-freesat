@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.SatIpFreesat.Configuration;
 using Jellyfin.Plugin.SatIpFreesat.Freesat;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
@@ -25,12 +26,16 @@ public sealed class SatIpLiveStream : ILiveStream
     public TunerChannelMapping TunerChannelMapping { get; set; } = null!;
     public MediaSourceInfo MediaSource { get; set; }
 
-    public SatIpLiveStream(FreesatChannel channel, string serverAddress, int rtspPort, int frontendNumber)
+    /// <summary>Which SAT>IP frontend (src=) this stream is using.</summary>
+    public int FrontendNumber { get; }
+
+    public SatIpLiveStream(FreesatChannel channel, string serverAddress, TunerEntry tuner)
     {
+        FrontendNumber = tuner.FrontendNumber;
         OriginalStreamId = channel.ChannelId;
         TunerHostId = "satip-freesat";
 
-        var rtspUrl = BuildRtspUrl(channel, serverAddress, rtspPort, frontendNumber);
+        var rtspUrl = BuildRtspUrl(channel, serverAddress, tuner.RtspPort, tuner.FrontendNumber);
 
         MediaSource = new MediaSourceInfo
         {

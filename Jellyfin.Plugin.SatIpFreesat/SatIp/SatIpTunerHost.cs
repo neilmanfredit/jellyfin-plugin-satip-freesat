@@ -52,7 +52,7 @@ public sealed class SatIpTunerHost : ITunerHost
 
     public Task<List<MediaSourceInfo>> GetChannelStreamMediaSources(string channelId, CancellationToken ct)
     {
-        var stream = CreateLiveStream(channelId);
+        var stream = CreateLiveStream(channelId, currentStreams: null);
         if (stream is null) return Task.FromResult(new List<MediaSourceInfo>());
         return Task.FromResult(new List<MediaSourceInfo> { stream.MediaSource });
     }
@@ -61,11 +61,12 @@ public sealed class SatIpTunerHost : ITunerHost
         string channelId, string streamId,
         IList<ILiveStream> currentLiveStreams, CancellationToken ct)
     {
-        var stream = CreateLiveStream(channelId);
+        var stream = CreateLiveStream(channelId, currentLiveStreams);
         if (stream is null)
-            throw new InvalidOperationException($"Channel {channelId} not found in scan cache");
+            throw new InvalidOperationException($"Channel {channelId} not found or no tuner available");
 
-        _logger.LogInformation("SAT>IP: opening stream for channel {Id}", channelId);
+        _logger.LogInformation("SAT>IP: opening stream for {Id} on frontend {Frontend}",
+            channelId, stream.FrontendNumber);
         return Task.FromResult<ILiveStream>(stream);
     }
 
@@ -75,21 +76,22 @@ public sealed class SatIpTunerHost : ITunerHost
         if (cfg is null || string.IsNullOrEmpty(cfg.ServerAddress))
             return Task.FromResult(new List<TunerHostInfo>());
 
+        var primary = cfg.PrimaryTuner;
         return Task.FromResult(new List<TunerHostInfo>
         {
             new()
             {
                 Id = $"satip-{cfg.ServerAddress}",
-                Url = $"rtsp://{cfg.ServerAddress}:{cfg.RtspPort}",
+                Url = $"rtsp://{cfg.ServerAddress}:{primary.RtspPort}",
                 Type = Type,
                 FriendlyName = $"SAT>IP Freesat @ {cfg.ServerAddress}",
-                TunerCount = cfg.TunerCount,
+                TunerCount = cfg.Tuners.Count > 0 ? cfg.Tuners.Count : 1,
                 AllowHWTranscoding = false,
             },
         });
     }
 
-    private SatIpLiveStream? CreateLiveStream(string channelId)
+    private SatIpLiveStream? CreateLiveStream(string channelId, IList<ILiveStream>? currentStreams)
     {
         var cfg = Plugin.Instance?.Configuration;
         if (cfg is null || string.IsNullOrEmpty(cfg.ServerAddress)) return null;
@@ -100,6 +102,16 @@ public sealed class SatIpTunerHost : ITunerHost
         var channel = scan.Channels.FirstOrDefault(c => c.ChannelId == channelId);
         if (channel is null) return null;
 
-        return new SatIpLiveStream(channel, cfg.ServerAddress, cfg.RtspPort, cfg.FrontendNumber);
+        // Pick the first frontend not already claimed by an active stream
+        var usedFrontends = currentStreams?
+            .OfType<SatIpLiveStream>()
+            .Select(s => s.FrontendNumber)
+            .ToHashSet() ?? [];
+
+        var tuners = cfg.Tuners is { Count: > 0 } ? cfg.Tuners : [cfg.PrimaryTuner];
+        var tuner = tuners.FirstOrDefault(t => !usedFrontends.Contains(t.FrontendNumber))
+                    ?? tuners[0];
+
+        return new SatIpLiveStream(channel, cfg.ServerAddress, tuner);
     }
 }

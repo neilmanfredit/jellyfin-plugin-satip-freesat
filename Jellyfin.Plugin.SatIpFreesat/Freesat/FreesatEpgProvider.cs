@@ -79,9 +79,10 @@ public sealed class FreesatEpgProvider : IListingsProvider
     {
         var programs = new List<ProgramInfo>();
 
+        var primary = cfg.PrimaryTuner;
         var muxParams = new SatIpMuxParams
         {
-            FrontendNumber = cfg.FrontendNumber,
+            FrontendNumber = primary.FrontendNumber,
             FrequencyMHz = channel.Mux.FrequencyMHz,
             Polarization = char.ToLowerInvariant(channel.Mux.Polarization),
             SymbolRateKsym = channel.Mux.SymbolRateKsym,
@@ -90,7 +91,7 @@ public sealed class FreesatEpgProvider : IListingsProvider
 
         try
         {
-            await using var client = new RtspClient(cfg.ServerAddress, cfg.RtspPort, _logger);
+            await using var client = new RtspClient(cfg.ServerAddress, primary.RtspPort, _logger);
             await client.ConnectAsync(ct).ConfigureAwait(false);
             await client.SetupAndPlayAsync(muxParams, "18", ct).ConfigureAwait(false);
 

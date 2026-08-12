@@ -41,20 +41,24 @@ export default function (view) {
             : reachable ? `Reachable (${fmtMs(status.deviceReachableMs)})` : 'Unreachable';
 
         // Top summary
+        const tunerCount = Array.isArray(status.tuners) ? status.tuners.length : 0;
         view.querySelector('#statusSummary').innerHTML =
             metric('Plugin version', status.pluginVersion || '—') +
-            metric('Device', status.serverAddress ? `${status.serverAddress}:${status.rtspPort}` : 'Not configured') +
+            metric('Device', status.serverAddress || 'Not configured') +
+            metric('Tuners', tunerCount ? `${tunerCount} configured` : '—') +
             metric('Device status', reachableText + (status.deviceReachableError ? ` · ${status.deviceReachableError}` : '')) +
             metric('Channels', status.hasChannels ? String(status.channelCount) : 'No scan yet') +
             metric('Region', status.regionLabel || '—') +
             metric('Last scan', fmtTime(status.lastScanTime));
 
-        // Device detail
+        // Device detail — one metric per tuner
+        const tuners = Array.isArray(status.tuners) ? status.tuners : [];
+        const tunerHtml = tuners.map(t =>
+            metric(`Tuner ${t.index} (src=${t.frontendNumber})`, `port ${t.rtspPort}`)
+        ).join('');
         view.querySelector('#deviceDetail').innerHTML =
             metric('Address', status.serverAddress || '—') +
-            metric('RTSP port', String(status.rtspPort || 554)) +
-            metric('Frontend / src', String(status.frontendNumber || 1)) +
-            metric('Tuner count', String(status.tunerCount || 1)) +
+            tunerHtml +
             `<div class="sifMetric"><span class="sifMetricLabel">Reachability</span><span class="sifMetricValue">${badge(reachableText, reachableClass)}</span></div>` +
             (status.deviceReachableError ? metric('Connectivity error', status.deviceReachableError) : '');
 

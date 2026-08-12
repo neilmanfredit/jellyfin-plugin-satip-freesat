@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.SatIpFreesat.Configuration;
 using Jellyfin.Plugin.SatIpFreesat.Freesat;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,10 +13,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SatIpFreesat.Api;
 
-/// <summary>
-/// REST endpoints called by the plugin configuration and status pages.
-/// All routes are under /SatIpFreesat/.
-/// </summary>
 [ApiController]
 [Route("SatIpFreesat")]
 [Authorize(Policy = "RequiresElevation")]
@@ -34,7 +32,6 @@ public sealed class SatIpController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>Resolve a postcode to a region key + label.</summary>
     [HttpGet("resolve-region")]
     public ActionResult<ResolveRegionResponse> ResolveRegion([FromQuery] string postcode)
     {
@@ -49,7 +46,6 @@ public sealed class SatIpController : ControllerBase
         return Ok(new ResolveRegionResponse(key, info.Label));
     }
 
-    /// <summary>Return all known region keys and labels.</summary>
     [HttpGet("regions")]
     public ActionResult<RegionListItem[]> GetRegions()
     {
@@ -60,7 +56,6 @@ public sealed class SatIpController : ControllerBase
         return Ok(items);
     }
 
-    /// <summary>Trigger a full channel scan. Runs synchronously; may take several minutes.</summary>
     [HttpPost("scan")]
     public async Task<ActionResult<ScanStatusResponse>> TriggerScan(
         [FromBody] ScanRequest request,
@@ -75,17 +70,19 @@ public sealed class SatIpController : ControllerBase
             return BadRequest("valid regionKey required");
 
         cfg.ServerAddress = request.ServerAddress;
-        cfg.RtspPort = request.RtspPort > 0 ? request.RtspPort : 554;
-        cfg.FrontendNumber = request.FrontendNumber > 0 ? request.FrontendNumber : 1;
-        cfg.TunerCount = request.TunerCount > 0 ? request.TunerCount : 1;
         cfg.RegionKey = request.RegionKey;
         cfg.RegionLabel = RegionData.Regions[request.RegionKey].Label;
+
+        if (request.Tuners is { Count: > 0 })
+            cfg.Tuners = request.Tuners;
+
         Plugin.Instance!.SaveConfiguration();
 
+        var primary = cfg.PrimaryTuner;
         try
         {
             var result = await _scanner.ScanAsync(
-                cfg.ServerAddress, cfg.RtspPort, cfg.FrontendNumber,
+                cfg.ServerAddress, primary.RtspPort, primary.FrontendNumber,
                 cfg.RegionKey, ct).ConfigureAwait(false);
 
             cfg.LastScanTime = DateTime.UtcNow.ToString("O");
@@ -102,7 +99,6 @@ public sealed class SatIpController : ControllerBase
         }
     }
 
-    /// <summary>Return current scan status and channel count.</summary>
     [HttpGet("status")]
     public ActionResult<ScanStatusResponse> GetStatus()
     {
@@ -115,7 +111,6 @@ public sealed class SatIpController : ControllerBase
             $"{scan.Channels.Count} channels ({scan.RegionLabel}) — last scanned {scan.ScannedAt}"));
     }
 
-    /// <summary>Return rich status for the status page: device reachability, scan details, plugin info.</summary>
     [HttpGet("detailed-status")]
     public async Task<ActionResult<DetailedStatusResponse>> GetDetailedStatus(CancellationToken ct)
     {
@@ -124,6 +119,7 @@ public sealed class SatIpController : ControllerBase
             return StatusCode((int)HttpStatusCode.InternalServerError, "Plugin not loaded");
 
         var scan = _store.Current;
+        var primary = cfg.PrimaryTuner;
 
         var reachable = false;
         var reachableMs = 0L;
@@ -137,7 +133,7 @@ public sealed class SatIpController : ControllerBase
                 using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 probeCts.CancelAfter(TimeSpan.FromSeconds(3));
                 using var tcp = new TcpClient();
-                await tcp.ConnectAsync(cfg.ServerAddress, cfg.RtspPort, probeCts.Token).ConfigureAwait(false);
+                await tcp.ConnectAsync(cfg.ServerAddress, primary.RtspPort, probeCts.Token).ConfigureAwait(false);
                 reachable = true;
                 reachableMs = sw.ElapsedMilliseconds;
             }
@@ -149,6 +145,7 @@ public sealed class SatIpController : ControllerBase
         }
 
         var version = typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "unknown";
+        var tunerRows = cfg.Tuners.Select((t, i) => new TunerRow(i + 1, t.RtspPort, t.FrontendNumber)).ToArray();
 
         var channelRows = scan?.Channels
             .OrderBy(c => c.Number)
@@ -156,12 +153,10 @@ public sealed class SatIpController : ControllerBase
             .Select(c => new ChannelRow(c.Number, c.Name, c.IsHD, c.IsRadio, c.Mux.FrequencyMHz))
             .ToArray() ?? [];
 
-        var response = new DetailedStatusResponse(
+        return Ok(new DetailedStatusResponse(
             PluginVersion: version,
             ServerAddress: cfg.ServerAddress,
-            RtspPort: cfg.RtspPort,
-            FrontendNumber: cfg.FrontendNumber,
-            TunerCount: cfg.TunerCount,
+            Tuners: tunerRows,
             DeviceReachable: reachable,
             DeviceReachableMs: reachableMs,
             DeviceReachableError: reachableError,
@@ -171,12 +166,9 @@ public sealed class SatIpController : ControllerBase
             RegionLabel: scan?.RegionLabel ?? cfg.RegionLabel,
             LastScanTime: scan?.ScannedAt ?? cfg.LastScanTime,
             TopChannels: channelRows,
-            GeneratedUtc: DateTime.UtcNow.ToString("O"));
-
-        return Ok(response);
+            GeneratedUtc: DateTime.UtcNow.ToString("O")));
     }
 
-    /// <summary>Invalidate the channel store so the next scan replaces it.</summary>
     [HttpPost("rebuild-channels")]
     public ActionResult RebuildChannels()
     {
@@ -189,15 +181,13 @@ public sealed class SatIpController : ControllerBase
     public sealed record ResolveRegionResponse(string RegionKey, string RegionLabel);
     public sealed record RegionListItem(string Key, string Label);
     public sealed record ScanStatusResponse(bool HasChannels, int ChannelCount, string Message);
-
+    public sealed record TunerRow(int Index, int RtspPort, int FrontendNumber);
     public sealed record ChannelRow(int Number, string Name, bool IsHD, bool IsRadio, double FrequencyMHz);
 
     public sealed record DetailedStatusResponse(
         string PluginVersion,
         string ServerAddress,
-        int RtspPort,
-        int FrontendNumber,
-        int TunerCount,
+        TunerRow[] Tuners,
         bool DeviceReachable,
         long DeviceReachableMs,
         string DeviceReachableError,
@@ -212,9 +202,7 @@ public sealed class SatIpController : ControllerBase
     public sealed class ScanRequest
     {
         public string ServerAddress { get; set; } = string.Empty;
-        public int RtspPort { get; set; } = 554;
-        public int FrontendNumber { get; set; } = 1;
-        public int TunerCount { get; set; } = 1;
+        public List<TunerEntry> Tuners { get; set; } = [];
         public string RegionKey { get; set; } = string.Empty;
     }
 }

@@ -18,16 +18,14 @@
             }
         }
         #SatIpFreesatConfigPage *, #SatIpFreesatConfigPage *::before, #SatIpFreesatConfigPage *::after { box-sizing: border-box; }
-        #SatIpFreesatConfigPage .content-primary, #SatIpFreesatConfigPage .sifForm { min-width: 0; }
-        #SatIpFreesatConfigPage .sifForm { margin-top: 1em; }
+        #SatIpFreesatConfigPage .content-primary { min-width: 0; }
         #SatIpFreesatConfigPage .sifPageHeader { margin-bottom: 1.4em; }
         #SatIpFreesatConfigPage .sifPageHeader h2 { margin-bottom: .25em; }
         #SatIpFreesatConfigPage .sifMuted { opacity: .72; }
         #SatIpFreesatConfigPage .sifGrid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
-            gap: 1em;
-            min-width: 0;
+            gap: 1em; min-width: 0;
         }
         #SatIpFreesatConfigPage .sifGrid > * { min-width: 0; }
         #SatIpFreesatConfigPage .sifSection {
@@ -38,34 +36,39 @@
             overflow: clip;
         }
         #SatIpFreesatConfigPage .sifSection > summary {
-            cursor: pointer;
-            overflow-wrap: anywhere;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
-            padding: 1em 1.1em;
-            font-size: 1.08em;
-            font-weight: 600;
-            background: var(--sif-surface-strong);
+            cursor: pointer; overflow-wrap: anywhere; padding: 1em 1.1em;
+            font-size: 1.08em; font-weight: 600; background: var(--sif-surface-strong);
+            -webkit-tap-highlight-color: transparent; touch-action: manipulation;
         }
         #SatIpFreesatConfigPage .sifSection > summary:hover { filter: brightness(1.08); }
         #SatIpFreesatConfigPage .sifSection > summary:focus-visible { outline: 2px solid var(--sif-focus); outline-offset: 2px; }
         #SatIpFreesatConfigPage .sifSectionBody { padding: 1em 1.1em 1.1em; }
         #SatIpFreesatConfigPage .sifInlineButtons { display: flex; flex-wrap: wrap; gap: .6em; }
-        #SatIpFreesatConfigPage .sifScanStatus { margin-bottom: .75em; font-style: italic; opacity: .8; }
+        #SatIpFreesatConfigPage .sifTableWrap {
+            max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain;
+            border: 1px solid var(--sif-border); border-radius: var(--sif-radius-small);
+            margin-top: .8em;
+        }
+        #SatIpFreesatConfigPage .sifTable { width: 100%; min-width: 360px; border-collapse: collapse; font-size: .92em; }
+        #SatIpFreesatConfigPage .sifTable th,
+        #SatIpFreesatConfigPage .sifTable td {
+            text-align: left; padding: .45em .62em;
+            border-bottom: 1px solid var(--sif-divider);
+        }
+        #SatIpFreesatConfigPage .sifTable th { background: var(--sif-surface-strong); font-weight: 600; white-space: nowrap; }
+        #SatIpFreesatConfigPage .sifTable tbody tr:last-child td { border-bottom: 0; }
+        #SatIpFreesatConfigPage .sifTable input[type=number] { width: 100%; max-width: 90px; }
         #SatIpFreesatConfigPage .sifExperimental {
             padding: .8em;
             border-inline-start: .25em solid rgba(215,135,28,.75);
             border-radius: var(--sif-radius-small);
             background: rgba(215,135,28,.08);
         }
-        #SatIpFreesatConfigPage .checkboxContainer label[title]::after {
-            content: "ⓘ";
-            display: inline-block;
-            margin-inline-start: .38em;
-            font-size: .82em;
-            opacity: .58;
-            vertical-align: .08em;
+        #SatIpFreesatConfigPage .sifStatusLink {
+            display: inline-flex; align-items: center; gap: .35em;
+            font-size: .88em; opacity: .8; text-decoration: none;
         }
+        #SatIpFreesatConfigPage .sifStatusLink:hover { opacity: 1; }
         @media (max-width: 600px) {
             #SatIpFreesatConfigPage .sifSectionBody { padding: .82em; }
             #SatIpFreesatConfigPage .sifSection > summary { padding: .9em .82em; }
@@ -77,115 +80,136 @@
         <div class="content-primary">
             <div class="sifPageHeader">
                 <h2>SAT&gt;IP Freesat</h2>
-                <div class="sifMuted">Configure your SAT&gt;IP device, UK region, streaming behaviour, and subtitles. Live device status and channel list are on the SAT&gt;IP Freesat Status page.</div>
+                <div class="sifMuted">Configure your SAT&gt;IP device, UK region, and streaming options.
+                    &nbsp;<a class="sifStatusLink" href="#!/configurationpage?name=satipfreesatstatus">&#8594; Status page</a>
+                </div>
             </div>
 
-            <form class="sifForm" id="SatIpFreesatConfigForm">
+            <form id="SatIpFreesatConfigForm">
 
+                <!-- SAT>IP device ─────────────────────────────────────────── -->
                 <details class="sifSection" open>
                     <summary>SAT&gt;IP device</summary>
-                    <div class="sifSectionBody sifGrid">
-                        <div class="inputContainer">
-                            <input is="emby-input" type="text" id="serverAddress" label="Server address" placeholder="192.168.1.100" />
-                            <div class="fieldDescription">IP address or hostname of your SAT&gt;IP server (e.g. Geniatech T230C, Inverto iLNB, TBS).</div>
+                    <div class="sifSectionBody">
+                        <div class="sifGrid">
+                            <div class="inputContainer">
+                                <input is="emby-input" type="text" id="serverAddress" label="Server address" placeholder="192.168.1.100" />
+                                <div class="fieldDescription">IP address or hostname of your SAT&gt;IP server.</div>
+                            </div>
+                            <div class="inputContainer" style="max-width:200px">
+                                <input is="emby-input" type="number" min="1" max="16" id="tunerCount" label="Number of tuners" />
+                                <div class="fieldDescription">How many simultaneous streams the device supports. Changing this rebuilds the tuner table below.</div>
+                            </div>
                         </div>
-                        <div class="inputContainer">
-                            <input is="emby-input" type="number" min="1" max="65535" id="rtspPort" label="RTSP port" />
+
+                        <div class="sifTableWrap">
+                            <table class="sifTable">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Tuner</th>
+                                        <th scope="col">RTSP port</th>
+                                        <th scope="col">Source (src=)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tunerTableBody"></tbody>
+                            </table>
                         </div>
-                        <div class="inputContainer">
-                            <input is="emby-input" type="number" min="1" max="8" id="frontendNumber" label="Frontend / source number" />
-                            <div class="fieldDescription">SAT&gt;IP <code>src=</code> parameter. 1 for most single-tuner devices.</div>
-                        </div>
-                        <div class="inputContainer">
-                            <input is="emby-input" type="number" min="1" max="16" id="tunerCount" label="Number of tuners" />
-                            <div class="fieldDescription">How many simultaneous streams the device supports.</div>
+                        <div class="fieldDescription" style="margin-top:.5em">
+                            Each tuner occupies one <code>src=</code> slot on the SAT&gt;IP device.
+                            For a 2-tuner device both looking at Astra 2 (28.2°E), use src=1 and src=2 — both on port 554.
+                            DiSEqC multi-switch and multi-dish support is planned for a future release.
                         </div>
                     </div>
                 </details>
 
+                <!-- UK region ────────────────────────────────────────────── -->
                 <details class="sifSection" open>
                     <summary>UK region</summary>
                     <div class="sifSectionBody">
                         <div class="sifGrid">
                             <div class="inputContainer">
                                 <input is="emby-input" type="text" id="postcode" label="UK postcode" placeholder="SK6 1AA" />
-                                <div class="fieldDescription">Enter your postcode to resolve your Freesat region automatically.</div>
+                                <div class="fieldDescription">Enter your postcode to resolve your region automatically.</div>
                             </div>
                             <div class="inputContainer">
                                 <select is="emby-select" id="regionSelect" label="Region">
                                     <option value="">— select a region —</option>
                                 </select>
-                                <div class="fieldDescription">Determines which BBC One / ITV1 variant is assigned to channels 101 / 103.</div>
+                                <div class="fieldDescription">Determines which BBC One / ITV1 variant is on channels 101 / 103.</div>
                             </div>
                         </div>
-                        <div class="sifInlineButtons" style="margin-top:.5em">
+                        <div class="sifInlineButtons" style="margin-top:.6em">
                             <button is="emby-button" type="button" id="btnResolvePostcode" class="raised"><span>Look up region</span></button>
                         </div>
                     </div>
                 </details>
 
+                <!-- Channel scan ─────────────────────────────────────────── -->
                 <details class="sifSection" open>
                     <summary>Channel scan</summary>
                     <div class="sifSectionBody">
-                        <div id="scanStatus" class="sifScanStatus">Status: loading…</div>
-                        <div class="fieldDescription" style="margin-bottom:.8em">Tunes the bootstrap mux (11425H), reads the NIT to discover all 28.2°E muxes, scans each for services, then reads the BAT for bouquet / LCN data. A full scan takes 1–5 minutes.</div>
+                        <div id="scanStatus" style="margin-bottom:.6em;font-style:italic;opacity:.8">Status: loading…</div>
+                        <div class="fieldDescription" style="margin-bottom:.8em">Tunes 11425H (bootstrap), reads NIT → all 28.2°E muxes, scans each for services, reads BAT for LCNs. Typically 1–5 minutes.</div>
                         <div class="sifInlineButtons">
                             <button is="emby-button" type="button" id="btnScan" class="raised"><span>Scan for channels</span></button>
                         </div>
-                        <div id="scanSpinner" style="display:none;margin-top:.6em;font-style:italic;opacity:.8">Scanning — this may take several minutes…</div>
-                        <div class="inputContainer" style="margin-top:1em;max-width:280px">
+                        <div id="scanSpinner" style="display:none;margin-top:.5em;font-style:italic;opacity:.8">Scanning — this may take several minutes…</div>
+                        <div class="inputContainer" style="margin-top:1em;max-width:240px">
                             <input is="emby-input" type="number" min="0" max="168" id="autoScanIntervalHours" label="Auto-rescan interval (hours)" />
-                            <div class="fieldDescription">0 = manual scans only. The plugin will rescan automatically at this interval.</div>
+                            <div class="fieldDescription">0 = manual only.</div>
                         </div>
                     </div>
                 </details>
 
+                <!-- Streaming ────────────────────────────────────────────── -->
                 <details class="sifSection">
                     <summary>Streaming and sharing</summary>
                     <div class="sifSectionBody">
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label><input is="emby-checkbox" type="checkbox" id="enableStreamSharing" /><span>Share one RTSP session between viewers of the same channel</span></label>
-                            <div class="fieldDescription checkboxFieldDescription">Reduces tuner use. Each Jellyfin reader still gets an independent buffered stream from the plugin.</div>
+                            <div class="fieldDescription checkboxFieldDescription">Reduces tuner use. Each Jellyfin reader still gets an independent buffered stream.</div>
                         </div>
                         <div class="sifGrid" style="margin-top:.8em">
                             <div class="inputContainer">
                                 <input is="emby-input" type="number" min="64" max="8192" step="64" id="rtpReceiveBufferKiB" label="RTP receive buffer (KiB)" />
-                                <div class="fieldDescription">Default: 512. Larger values reduce packet loss on busy or high-latency networks.</div>
+                                <div class="fieldDescription">Default 512. Larger values reduce packet loss on busy networks.</div>
                             </div>
                             <div class="inputContainer">
-                                <input is="emby-input" type="number" min="0" max="120" step="1" id="packetTimeoutSeconds" label="Stall watchdog (seconds)" />
-                                <div class="fieldDescription">Reconnect when no RTP data is received for this many seconds. 0 = disabled.</div>
+                                <input is="emby-input" type="number" min="0" max="120" id="packetTimeoutSeconds" label="Stall watchdog (seconds)" />
+                                <div class="fieldDescription">Reconnect if no RTP data for this long. 0 = disabled.</div>
                             </div>
                         </div>
                     </div>
                 </details>
 
+                <!-- Subtitles & video ────────────────────────────────────── -->
                 <details class="sifSection">
                     <summary>Subtitles and video</summary>
                     <div class="sifSectionBody">
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label><input is="emby-checkbox" type="checkbox" id="exposeSubtitleStreams" /><span>Expose DVB subtitle and teletext tracks to Jellyfin</span></label>
-                            <div class="fieldDescription checkboxFieldDescription">When disabled (default), subtitle and teletext PIDs from the transport stream are not reported to Jellyfin. Disable this if Live TV channels hang with an infinite loading spinner.</div>
+                            <div class="fieldDescription checkboxFieldDescription">Disabled by default. Enable only if you need subtitle tracks — some clients hang with DVB subtitles active.</div>
                         </div>
-                        <div class="inputContainer" style="margin-top:.8em;max-width:280px">
+                        <div class="inputContainer" style="margin-top:.8em;max-width:240px">
                             <input is="emby-input" type="text" id="preferredSubtitleLanguage" label="Preferred subtitle language" placeholder="eng" />
-                            <div class="fieldDescription">Three-letter ISO 639-2 language code (e.g. <code>eng</code>). Only used when subtitle streams are exposed.</div>
+                            <div class="fieldDescription">ISO 639-2 code, e.g. <code>eng</code>. Only applies when subtitle tracks are exposed.</div>
                         </div>
                         <div class="checkboxContainer checkboxContainer-withDescription sifExperimental" style="margin-top:.8em">
-                            <label><input is="emby-checkbox" type="checkbox" id="forceDeinterlace" /><span title="Force-deinterlace all live TV streams. Experimental — requires a Jellyfin server restart.">Force deinterlacing for all channels</span></label>
-                            <div class="fieldDescription checkboxFieldDescription">Experimental. Requires a Jellyfin server restart to take effect.</div>
+                            <label><input is="emby-checkbox" type="checkbox" id="forceDeinterlace" /><span>Force deinterlacing for all channels</span></label>
+                            <div class="fieldDescription checkboxFieldDescription">Experimental. Requires a Jellyfin server restart.</div>
                         </div>
                     </div>
                 </details>
 
+                <!-- Channels ─────────────────────────────────────────────── -->
                 <details class="sifSection">
-                    <summary>Channels</summary>
+                    <summary>Channel maintenance</summary>
                     <div class="sifSectionBody">
-                        <div class="fieldDescription" style="margin-bottom:.8em">"Rebuild channels" clears the cached channel list so the next scan fully replaces it. Use this if channels have gone stale or a scan left the list in an inconsistent state.</div>
+                        <div class="fieldDescription" style="margin-bottom:.8em">Clear the cached channel list so the next scan fully replaces it.</div>
                         <div class="sifInlineButtons">
                             <button is="emby-button" type="button" id="btnRebuildChannels" class="raised"><span>Rebuild channels</span></button>
                         </div>
-                        <div id="rebuildResult" class="sifMuted" role="status" aria-live="polite" style="margin-top:.6em"></div>
+                        <div id="rebuildResult" class="sifMuted" role="status" aria-live="polite" style="margin-top:.5em"></div>
                     </div>
                 </details>
 
