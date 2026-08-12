@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SAT&gt;IP Freesat</title>
+</head>
+<body>
+<div id="SatIpFreesatConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-select,emby-checkbox">
+    <div data-role="content">
+        <div class="content-primary">
+            <form id="SatIpFreesatConfigForm">
+
+                <div class="sectionTitleContainer flex align-items-center">
+                    <h2 class="sectionTitle">SAT&gt;IP Server</h2>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="serverAddress">SAT&gt;IP Server Address</label>
+                    <input id="serverAddress" name="serverAddress" type="text"
+                           class="emby-input" placeholder="192.168.1.100" />
+                    <div class="fieldDescription">IP address or hostname of your SAT&gt;IP server (e.g. Geniatech T230C, Inverto, TBS).</div>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="rtspPort">RTSP Port</label>
+                    <input id="rtspPort" name="rtspPort" type="number"
+                           class="emby-input" value="554" min="1" max="65535" />
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="frontendNumber">Frontend / Source Number</label>
+                    <input id="frontendNumber" name="frontendNumber" type="number"
+                           class="emby-input" value="1" min="1" max="8" />
+                    <div class="fieldDescription">SAT&gt;IP src= parameter. 1 for most single-tuner devices.</div>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="tunerCount">Number of Tuners</label>
+                    <input id="tunerCount" name="tunerCount" type="number"
+                           class="emby-input" value="1" min="1" max="16" />
+                </div>
+
+                <div class="sectionTitleContainer flex align-items-center" style="margin-top:1.5em">
+                    <h2 class="sectionTitle">UK Region</h2>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="postcode">UK Postcode</label>
+                    <input id="postcode" name="postcode" type="text"
+                           class="emby-input" placeholder="SK6 1AA" />
+                    <div class="fieldDescription">Enter your postcode to look up your Freesat region automatically.</div>
+                </div>
+                <div style="margin-bottom:1em">
+                    <button id="btnResolvePostcode" class="emby-button emby-button-secondary" type="button">
+                        Look up region
+                    </button>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="regionSelect">Region</label>
+                    <select id="regionSelect" name="regionKey" class="emby-select">
+                        <option value="">— select a region —</option>
+                    </select>
+                    <div class="fieldDescription">Your region determines which BBC One / ITV1 variant
+                        is assigned to channels 101 / 103, and which regional bouquet Freesat sends
+                        to your address.</div>
+                </div>
+
+                <div class="sectionTitleContainer flex align-items-center" style="margin-top:1.5em">
+                    <h2 class="sectionTitle">Channel Scan</h2>
+                </div>
+                <div id="scanStatus" style="margin-bottom:0.75em;font-style:italic;color:var(--theme-text-color-secondary)">
+                    Status: loading…
+                </div>
+                <div style="margin-bottom:1em">
+                    <button id="btnScan" class="emby-button" type="button">
+                        Scan for channels
+                    </button>
+                    <span id="scanSpinner" style="display:none;margin-left:1em">Scanning — this may take several minutes…</span>
+                </div>
+                <div class="fieldDescription" style="margin-bottom:1.5em">
+                    Scanning tunes to the Freesat bootstrap mux (11425H), reads the NIT to discover
+                    all muxes, scans each mux for services, then reads the BAT for bouquet/LCN data.
+                    A full scan takes 1–5 minutes depending on how many muxes your dish receives.
+                </div>
+
+                <div>
+                    <button id="btnSave" class="emby-button emby-button-submit" type="submit">
+                        Save
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>
