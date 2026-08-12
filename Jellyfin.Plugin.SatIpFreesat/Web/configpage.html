@@ -109,15 +109,17 @@
                                         <th scope="col">Tuner</th>
                                         <th scope="col">RTSP port</th>
                                         <th scope="col">Source (src=)</th>
+                                        <th scope="col">DiSEqC port</th>
+                                        <th scope="col">Satellite</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tunerTableBody"></tbody>
                             </table>
                         </div>
                         <div class="fieldDescription" style="margin-top:.5em">
-                            Each tuner occupies one <code>src=</code> slot on the SAT&gt;IP device.
-                            For a 2-tuner device both looking at Astra 2 (28.2°E), use src=1 and src=2 — both on port 554.
-                            DiSEqC multi-switch and multi-dish support is planned for a future release.
+                            Each row is one physical tuner on the SAT&gt;IP device.
+                            The <strong>src=</strong> number maps directly to a DiSEqC port on the LNB switch — the SAT&gt;IP device handles the switch commands automatically.
+                            <strong>DiSEqC port</strong> and <strong>Satellite</strong> are informational labels to help you identify your wiring; leave blank for a single-LNB setup.
                         </div>
                     </div>
                 </details>

@@ -11,6 +11,15 @@ public sealed class TunerEntry
 
     /// <summary>SAT>IP src= parameter identifying this tuner/frontend.</summary>
     public int FrontendNumber { get; set; } = 1;
+
+    /// <summary>
+    /// DiSEqC port this tuner is wired to on the LNB switch: A, B, C, D, or empty for no switch.
+    /// Informational — the SAT>IP device handles the actual DiSEqC signalling using src=.
+    /// </summary>
+    public string DiSEqCPort { get; set; } = string.Empty;
+
+    /// <summary>Human-readable satellite label, e.g. "Astra 2 (28.2°E)".</summary>
+    public string SatelliteLabel { get; set; } = "Astra 2 (28.2°E)";
 }
 
 public sealed class PluginConfiguration : BasePluginConfiguration

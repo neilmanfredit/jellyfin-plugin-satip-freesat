@@ -37,6 +37,8 @@ export default function (view) {
 
     // ── tuner table ────────────────────────────────────────────────────────
 
+    const DISEQC_PORTS = ['', 'A', 'B', 'C', 'D'];
+
     function buildTunerTable(count, existing) {
         const tbody = view.querySelector('#tunerTableBody');
         // Preserve current values from any existing rows before rebuilding
@@ -48,11 +50,18 @@ export default function (view) {
             const live = current[i] || {};
             const port = live.rtspPort || saved.rtspPort || 554;
             const fe = live.frontendNumber || saved.frontendNumber || (i + 1);
+            const diseqc = live.diSEqCPort ?? saved.diSEqCPort ?? '';
+            const satLabel = live.satelliteLabel ?? saved.satelliteLabel ?? 'Astra 2 (28.2°E)';
+            const diseqcOpts = DISEQC_PORTS.map(p =>
+                `<option value="${escHtml(p)}"${p === diseqc ? ' selected' : ''}>${escHtml(p || '— none —')}</option>`
+            ).join('');
             const row = document.createElement('tr');
             row.innerHTML =
                 `<td>Tuner ${i + 1}</td>` +
                 `<td><input type="number" class="emby-input tuner-port" min="1" max="65535" value="${escHtml(port)}" style="width:80px"></td>` +
-                `<td><input type="number" class="emby-input tuner-frontend" min="1" max="32" value="${escHtml(fe)}" style="width:70px"></td>`;
+                `<td><input type="number" class="emby-input tuner-frontend" min="1" max="32" value="${escHtml(fe)}" style="width:70px"></td>` +
+                `<td><select class="emby-select tuner-diseqc" style="min-width:80px">${diseqcOpts}</select></td>` +
+                `<td><input type="text" class="emby-input tuner-satellite" value="${escHtml(satLabel)}" placeholder="Astra 2 (28.2°E)" style="min-width:130px"></td>`;
             tbody.appendChild(row);
         }
     }
@@ -60,11 +69,15 @@ export default function (view) {
     function collectTuners() {
         const ports = view.querySelectorAll('.tuner-port');
         const frontends = view.querySelectorAll('.tuner-frontend');
+        const diseqcs = view.querySelectorAll('.tuner-diseqc');
+        const satellites = view.querySelectorAll('.tuner-satellite');
         const tuners = [];
         for (let i = 0; i < ports.length; i++) {
             tuners.push({
                 rtspPort: parseInt(ports[i].value, 10) || 554,
                 frontendNumber: parseInt(frontends[i].value, 10) || (i + 1),
+                diSEqCPort: diseqcs[i]?.value ?? '',
+                satelliteLabel: satellites[i]?.value?.trim() || 'Astra 2 (28.2°E)',
             });
         }
         return tuners;

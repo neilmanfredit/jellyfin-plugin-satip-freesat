@@ -53,9 +53,15 @@ export default function (view) {
 
         // Device detail — one metric per tuner
         const tuners = Array.isArray(status.tuners) ? status.tuners : [];
-        const tunerHtml = tuners.map(t =>
-            metric(`Tuner ${t.index} (src=${t.frontendNumber})`, `port ${t.rtspPort}`)
-        ).join('');
+        const tunerHtml = tuners.map(t => {
+            const satLabel = t.satelliteLabel || 'Astra 2 (28.2°E)';
+            const diseqcSuffix = t.diSEqCPort ? ` · DiSEqC ${escapeHtml(t.diSEqCPort)}` : '';
+            return metric(
+                `Tuner ${t.index} — src=${t.frontendNumber}${diseqcSuffix}`,
+                `${escapeHtml(satLabel)}  ·  port ${t.rtspPort}`,
+                t.diSEqCPort ? `DiSEqC port ${t.diSEqCPort} → src=${t.frontendNumber}` : ''
+            );
+        }).join('');
         view.querySelector('#deviceDetail').innerHTML =
             metric('Address', status.serverAddress || '—') +
             tunerHtml +

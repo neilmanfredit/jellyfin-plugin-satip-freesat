@@ -145,7 +145,8 @@ public sealed class SatIpController : ControllerBase
         }
 
         var version = typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "unknown";
-        var tunerRows = cfg.Tuners.Select((t, i) => new TunerRow(i + 1, t.RtspPort, t.FrontendNumber)).ToArray();
+        var tunerRows = cfg.Tuners.Select((t, i) =>
+            new TunerRow(i + 1, t.RtspPort, t.FrontendNumber, t.DiSEqCPort, t.SatelliteLabel)).ToArray();
 
         var channelRows = scan?.Channels
             .OrderBy(c => c.Number)
@@ -181,7 +182,7 @@ public sealed class SatIpController : ControllerBase
     public sealed record ResolveRegionResponse(string RegionKey, string RegionLabel);
     public sealed record RegionListItem(string Key, string Label);
     public sealed record ScanStatusResponse(bool HasChannels, int ChannelCount, string Message);
-    public sealed record TunerRow(int Index, int RtspPort, int FrontendNumber);
+    public sealed record TunerRow(int Index, int RtspPort, int FrontendNumber, string DiSEqCPort, string SatelliteLabel);
     public sealed record ChannelRow(int Number, string Name, bool IsHD, bool IsRadio, double FrequencyMHz);
 
     public sealed record DetailedStatusResponse(
