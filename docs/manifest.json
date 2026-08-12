@@ -12,17 +12,17 @@
         "version": "2.0.0.0",
         "changelog": "Initial release.",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.2.0/jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip",
-        "checksum": "b2b39b6f70f217c34d597b0166531e14",
-        "timestamp": "2026-08-12T10:39:45Z"
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.3.0/jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip",
+        "checksum": "6e8e900531765cac0a3d1be55f3c5b05",
+        "timestamp": "2026-08-12T10:53:23Z"
       },
       {
         "version": "1.0.0.0",
         "changelog": "Initial release.",
         "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.2.0/jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip",
-        "checksum": "199d4dcd63d0593fad2102e2768852c5",
-        "timestamp": "2026-08-12T10:39:45Z"
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.3.0/jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip",
+        "checksum": "06fa2900a315b97736c155e4db4c4c97",
+        "timestamp": "2026-08-12T10:53:23Z"
       }
     ]
   }
