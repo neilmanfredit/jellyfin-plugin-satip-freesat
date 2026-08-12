@@ -83,37 +83,88 @@ export default function (view) {
         return tuners;
     }
 
-    // ── regions ────────────────────────────────────────────────────────────
+    // ── regions (static — no API call needed) ─────────────────────────────
 
-    async function loadRegions(selectEl, currentKey) {
-        try {
-            const regions = await apiGet('SatIpFreesat/regions');
-            for (const r of (Array.isArray(regions) ? regions : [])) {
-                const opt = document.createElement('option');
-                opt.value = r.key;
-                opt.textContent = r.label;
-                if (r.key === currentKey) opt.selected = true;
-                selectEl.appendChild(opt);
-            }
-        } catch (e) {
-            console.error('SAT>IP Freesat: could not load regions', e);
+    const REGIONS = [
+        { key: 'anglia',      label: 'East of England (Anglia)' },
+        { key: 'border',      label: 'Border (Cumbria & South Scotland)' },
+        { key: 'central',     label: 'Central England (Midlands)' },
+        { key: 'channel',     label: 'Channel Islands' },
+        { key: 'granada',     label: 'North West England (Granada)' },
+        { key: 'london',      label: 'London' },
+        { key: 'meridian',    label: 'South & South East England (Meridian)' },
+        { key: 'stv_central', label: 'Central Scotland (STV Central)' },
+        { key: 'stv_north',   label: 'North Scotland (STV North / Grampian)' },
+        { key: 'tynetees',    label: 'North East England (Tyne Tees)' },
+        { key: 'utv',         label: 'Northern Ireland (UTV)' },
+        { key: 'wales',       label: 'Wales' },
+        { key: 'west',        label: 'West of England (Bristol/Bath)' },
+        { key: 'westcountry', label: 'South West England (West Country)' },
+        { key: 'yorkshire',   label: 'Yorkshire' },
+    ];
+
+    const POSTCODE_AREAS = {
+        CA:'border', DG:'border', TD:'border',
+        B:'central', CV:'central', DY:'central', WS:'central', WV:'central',
+        TF:'central', SY:'central', LE:'central', NN:'central', DE:'central',
+        NG:'central', LN:'central', WR:'central', OX:'central',
+        GY:'channel', JE:'channel',
+        M:'granada', SK:'granada', OL:'granada', BL:'granada', WN:'granada',
+        WA:'granada', L:'granada', CH:'granada', CW:'granada', PR:'granada',
+        BB:'granada', FY:'granada', LA:'granada', ST:'granada', IM:'granada',
+        E:'london', EC:'london', N:'london', NW:'london', SE:'london',
+        SW:'london', W:'london', WC:'london', BR:'london', CR:'london',
+        DA:'london', EN:'london', HA:'london', IG:'london', KT:'london',
+        RM:'london', SM:'london', TW:'london', UB:'london', WD:'london',
+        AL:'london', HP:'london',
+        SO:'meridian', PO:'meridian', GU:'meridian', RH:'meridian',
+        BN:'meridian', TN:'meridian', ME:'meridian', CT:'meridian',
+        SP:'meridian', BH:'meridian', RG:'meridian', SL:'meridian',
+        IP:'anglia', NR:'anglia', CO:'anglia', CM:'anglia', SS:'anglia',
+        CB:'anglia', PE:'anglia', SG:'anglia', LU:'anglia', MK:'anglia',
+        BT:'utv',
+        G:'stv_central', ML:'stv_central', PA:'stv_central', KA:'stv_central',
+        FK:'stv_central', KY:'stv_central', EH:'stv_central',
+        AB:'stv_north', IV:'stv_north', PH:'stv_north', DD:'stv_north',
+        KW:'stv_north', ZE:'stv_north', HS:'stv_north',
+        NE:'tynetees', SR:'tynetees', DH:'tynetees', DL:'tynetees', TS:'tynetees',
+        CF:'wales', SA:'wales', NP:'wales', LD:'wales', LL:'wales',
+        BS:'west', BA:'west', GL:'west', HR:'west', SN:'west',
+        EX:'westcountry', PL:'westcountry', TQ:'westcountry',
+        TR:'westcountry', TA:'westcountry', DT:'westcountry',
+        LS:'yorkshire', BD:'yorkshire', HD:'yorkshire', HX:'yorkshire',
+        WF:'yorkshire', YO:'yorkshire', HU:'yorkshire', DN:'yorkshire',
+        S:'yorkshire', HG:'yorkshire',
+    };
+
+    function postcodeToRegionKey(postcode) {
+        let pc = postcode.trim().toUpperCase().replace(/\s+/g, '');
+        // Strip inward code: trailing digit + 2 letters (e.g. "1AA") → outward code
+        if (pc.length > 3 && /\d[A-Z]{2}$/.test(pc)) pc = pc.slice(0, -3);
+        // Extract leading letters only → area code
+        const area = (pc.match(/^[A-Z]+/) || [''])[0];
+        return POSTCODE_AREAS[area] || null;
+    }
+
+    function loadRegions(selectEl, currentKey) {
+        for (const r of REGIONS) {
+            const opt = document.createElement('option');
+            opt.value = r.key;
+            opt.textContent = r.label;
+            if (r.key === currentKey) opt.selected = true;
+            selectEl.appendChild(opt);
         }
     }
 
-    async function resolvePostcode(postcode, selectEl) {
+    function resolvePostcode(postcode, selectEl) {
         if (!postcode) return;
-        try {
-            const data = await apiGetQ('SatIpFreesat/resolve-region', { postcode });
-            for (const opt of selectEl.options) {
-                if (opt.value === data.regionKey) {
-                    selectEl.value = data.regionKey;
-                    Dashboard.alert('Region resolved to: ' + data.regionLabel);
-                    return;
-                }
-            }
-            Dashboard.alert('Region "' + data.regionKey + '" not found in list — please select manually.');
-        } catch {
-            Dashboard.alert('Could not resolve postcode. Check the postcode and try again.');
+        const key = postcodeToRegionKey(postcode);
+        if (key) {
+            selectEl.value = key;
+            const label = (REGIONS.find(r => r.key === key) || {}).label || key;
+            Dashboard.alert('Region resolved to: ' + label);
+        } else {
+            Dashboard.alert('Could not identify a Freesat region from that postcode — please select manually.');
         }
     }
 
@@ -224,7 +275,7 @@ export default function (view) {
 
         const regionSelect = view.querySelector('#regionSelect');
         while (regionSelect.options.length > 1) regionSelect.remove(1);
-        await loadRegions(regionSelect, cfg.regionKey);
+        loadRegions(regionSelect, cfg.regionKey);
         loadForm(cfg);
         await refreshScanStatus();
     }
@@ -236,7 +287,7 @@ export default function (view) {
         buildTunerTable(n, null);
     });
 
-    view.querySelector('#btnResolvePostcode').addEventListener('click', () => {
+    view.querySelector('#btnResolvePostcode').addEventListener('click', function () {
         resolvePostcode(view.querySelector('#postcode').value.trim(), view.querySelector('#regionSelect'));
     });
 
