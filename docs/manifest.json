@@ -9,20 +9,20 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
-        "version": "1.8.0.0",
+        "version": "1.9.0.0",
         "changelog": "Add plugin icon. Include meta.json in release zip so Jellyfin 10.9+ registers the plugin. Fix ApiClient.getJSON TypeError on status page. Add DiSEqC port and satellite label per tuner.",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.8.0/jellyfin-plugin-satip-freesat-v1.8.0-jellyfin12.zip",
-        "checksum": "401222adc963555730077caf85038091",
-        "timestamp": "2026-08-12T14:55:27Z"
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.0/jellyfin-plugin-satip-freesat-v1.9.0-jellyfin12.zip",
+        "checksum": "5b898b0de8479125d31b63d336e89525",
+        "timestamp": "2026-08-12T15:13:52Z"
       },
       {
-        "version": "1.8.0.0",
+        "version": "1.9.0.0",
         "changelog": "Add plugin icon. Include meta.json in release zip so Jellyfin 10.9+ registers the plugin. Fix ApiClient.getJSON TypeError on status page. Add DiSEqC port and satellite label per tuner.",
         "targetAbi": "10.9.0.0",
-        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.8.0/jellyfin-plugin-satip-freesat-v1.8.0-jellyfin10.zip",
-        "checksum": "afba218f5a51a41017f66d324d6f8216",
-        "timestamp": "2026-08-12T14:55:27Z"
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.0/jellyfin-plugin-satip-freesat-v1.9.0-jellyfin10.zip",
+        "checksum": "d9b250ee5e3c7ae3cb5816ae8dba2466",
+        "timestamp": "2026-08-12T15:13:52Z"
       }
     ]
   }
