@@ -1,0 +1,29 @@
+[
+  {
+    "guid": "9d4f3a1c-8c7e-4b5d-a6f0-2e9b1c8d7a3f",
+    "name": "SAT>IP Freesat",
+    "description": "SAT>IP tuner and UK Freesat EPG source for Jellyfin. Scans DVB-S SI tables directly, selects the correct regional bouquet by postcode, and assigns proper Freesat LCNs. No tvheadend required.",
+    "overview": "SAT>IP tuner + UK Freesat EPG — no tvheadend required",
+    "owner": "neilmanfredit",
+    "category": "Live TV",
+    "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
+    "versions": [
+      {
+        "version": "2.0.0.0",
+        "changelog": "Initial release.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.0.0/jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip",
+        "checksum": "",
+        "timestamp": "2026-08-12T00:00:00Z"
+      },
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial release.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.0.0/jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip",
+        "checksum": "",
+        "timestamp": "2026-08-12T00:00:00Z"
+      }
+    ]
+  }
+]
