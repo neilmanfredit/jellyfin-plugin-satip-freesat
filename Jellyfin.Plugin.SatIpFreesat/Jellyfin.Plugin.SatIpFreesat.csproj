@@ -32,8 +32,12 @@
   <ItemGroup>
     <None Remove="Web\configpage.html" />
     <None Remove="Web\configpage.js" />
+    <None Remove="Web\statuspage.html" />
+    <None Remove="Web\statuspage.js" />
     <EmbeddedResource Include="Web\configpage.html" />
     <EmbeddedResource Include="Web\configpage.js" />
+    <EmbeddedResource Include="Web\statuspage.html" />
+    <EmbeddedResource Include="Web\statuspage.js" />
   </ItemGroup>
 
 </Project>

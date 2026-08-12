@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.Freesat;
@@ -11,7 +12,7 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.SatIpFreesat.Api;
 
 /// <summary>
-/// REST endpoints called by the plugin configuration page.
+/// REST endpoints called by the plugin configuration and status pages.
 /// All routes are under /SatIpFreesat/.
 /// </summary>
 [ApiController]
@@ -59,7 +60,7 @@ public sealed class SatIpController : ControllerBase
         return Ok(items);
     }
 
-    /// <summary>Trigger a full channel scan. Runs asynchronously; poll /status for completion.</summary>
+    /// <summary>Trigger a full channel scan. Runs synchronously; may take several minutes.</summary>
     [HttpPost("scan")]
     public async Task<ActionResult<ScanStatusResponse>> TriggerScan(
         [FromBody] ScanRequest request,
@@ -73,7 +74,6 @@ public sealed class SatIpController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.RegionKey) || !RegionData.Regions.ContainsKey(request.RegionKey))
             return BadRequest("valid regionKey required");
 
-        // Save config first
         cfg.ServerAddress = request.ServerAddress;
         cfg.RtspPort = request.RtspPort > 0 ? request.RtspPort : 554;
         cfg.FrontendNumber = request.FrontendNumber > 0 ? request.FrontendNumber : 1;
@@ -115,9 +115,99 @@ public sealed class SatIpController : ControllerBase
             $"{scan.Channels.Count} channels ({scan.RegionLabel}) — last scanned {scan.ScannedAt}"));
     }
 
+    /// <summary>Return rich status for the status page: device reachability, scan details, plugin info.</summary>
+    [HttpGet("detailed-status")]
+    public async Task<ActionResult<DetailedStatusResponse>> GetDetailedStatus(CancellationToken ct)
+    {
+        var cfg = Plugin.Instance?.Configuration;
+        if (cfg is null)
+            return StatusCode((int)HttpStatusCode.InternalServerError, "Plugin not loaded");
+
+        var scan = _store.Current;
+
+        var reachable = false;
+        var reachableMs = 0L;
+        var reachableError = string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(cfg.ServerAddress))
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                probeCts.CancelAfter(TimeSpan.FromSeconds(3));
+                using var tcp = new TcpClient();
+                await tcp.ConnectAsync(cfg.ServerAddress, cfg.RtspPort, probeCts.Token).ConfigureAwait(false);
+                reachable = true;
+                reachableMs = sw.ElapsedMilliseconds;
+            }
+            catch (Exception ex)
+            {
+                reachableMs = sw.ElapsedMilliseconds;
+                reachableError = ex is OperationCanceledException ? "timeout" : ex.Message;
+            }
+        }
+
+        var version = typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+        var channelRows = scan?.Channels
+            .OrderBy(c => c.Number)
+            .Take(10)
+            .Select(c => new ChannelRow(c.Number, c.Name, c.IsHD, c.IsRadio, c.Mux.FrequencyMHz))
+            .ToArray() ?? [];
+
+        var response = new DetailedStatusResponse(
+            PluginVersion: version,
+            ServerAddress: cfg.ServerAddress,
+            RtspPort: cfg.RtspPort,
+            FrontendNumber: cfg.FrontendNumber,
+            TunerCount: cfg.TunerCount,
+            DeviceReachable: reachable,
+            DeviceReachableMs: reachableMs,
+            DeviceReachableError: reachableError,
+            HasChannels: scan is not null,
+            ChannelCount: scan?.Channels.Count ?? 0,
+            MuxCount: scan?.MuxCount ?? 0,
+            RegionLabel: scan?.RegionLabel ?? cfg.RegionLabel,
+            LastScanTime: scan?.ScannedAt ?? cfg.LastScanTime,
+            TopChannels: channelRows,
+            GeneratedUtc: DateTime.UtcNow.ToString("O"));
+
+        return Ok(response);
+    }
+
+    /// <summary>Invalidate the channel store so the next scan replaces it.</summary>
+    [HttpPost("rebuild-channels")]
+    public ActionResult RebuildChannels()
+    {
+        _store.Invalidate();
+        return Ok(new { message = "Channel store cleared. Trigger a new scan to repopulate." });
+    }
+
+    // ── Request / response types ────────────────────────────────────────────
+
     public sealed record ResolveRegionResponse(string RegionKey, string RegionLabel);
     public sealed record RegionListItem(string Key, string Label);
     public sealed record ScanStatusResponse(bool HasChannels, int ChannelCount, string Message);
+
+    public sealed record ChannelRow(int Number, string Name, bool IsHD, bool IsRadio, double FrequencyMHz);
+
+    public sealed record DetailedStatusResponse(
+        string PluginVersion,
+        string ServerAddress,
+        int RtspPort,
+        int FrontendNumber,
+        int TunerCount,
+        bool DeviceReachable,
+        long DeviceReachableMs,
+        string DeviceReachableError,
+        bool HasChannels,
+        int ChannelCount,
+        int MuxCount,
+        string RegionLabel,
+        string LastScanTime,
+        ChannelRow[] TopChannels,
+        string GeneratedUtc);
 
     public sealed class ScanRequest
     {

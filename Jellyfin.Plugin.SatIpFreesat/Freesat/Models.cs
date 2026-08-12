@@ -79,4 +79,5 @@ public sealed class ScanResult
     public string RegionKey { get; init; } = string.Empty;
     public string RegionLabel { get; init; } = string.Empty;
     public string ScannedAt { get; init; } = string.Empty;
+    public int MuxCount { get; init; }
 }

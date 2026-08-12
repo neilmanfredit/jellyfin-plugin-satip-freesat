@@ -1,0 +1,148 @@
+<div id="SatIpFreesatStatusPage" data-role="page" class="page type-interior pluginConfigurationPage" data-controller="__plugin/satipfreesatstatusjs">
+    <style>
+        #SatIpFreesatStatusPage {
+            --sif-radius: .7em;
+            --sif-radius-small: .48em;
+            --sif-surface: rgba(128,128,128,.08);
+            --sif-surface-strong: rgba(128,128,128,.13);
+            --sif-border: rgba(128,128,128,.28);
+            --sif-divider: rgba(128,128,128,.22);
+            --sif-focus: currentColor;
+        }
+        @supports (background: color-mix(in srgb, currentColor 10%, transparent)) {
+            #SatIpFreesatStatusPage {
+                --sif-surface: color-mix(in srgb, currentColor 6%, transparent);
+                --sif-surface-strong: color-mix(in srgb, currentColor 10%, transparent);
+                --sif-border: color-mix(in srgb, currentColor 24%, transparent);
+                --sif-divider: color-mix(in srgb, currentColor 18%, transparent);
+            }
+        }
+        #SatIpFreesatStatusPage *, #SatIpFreesatStatusPage *::before, #SatIpFreesatStatusPage *::after { box-sizing: border-box; }
+        #SatIpFreesatStatusPage .content-primary { min-width: 0; }
+        #SatIpFreesatStatusPage .sifPageHeader { margin-bottom: 1.4em; }
+        #SatIpFreesatStatusPage .sifPageHeader h2 { margin-bottom: .25em; }
+        #SatIpFreesatStatusPage .sifMuted { opacity: .72; }
+        #SatIpFreesatStatusPage .sifStatusHeader {
+            display: flex; flex-wrap: wrap; align-items: center;
+            justify-content: space-between; gap: .8em 1em; margin: 0 0 .8em; min-width: 0;
+        }
+        #SatIpFreesatStatusPage .sifStatusHeader > * { min-width: 0; }
+        #SatIpFreesatStatusPage .sifStatusHeader h2 { margin: 0; }
+        #SatIpFreesatStatusPage .sifSummary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+            gap: .5em; margin-bottom: 1em; min-width: 0;
+        }
+        #SatIpFreesatStatusPage .sifMetric {
+            padding: .62em; border-radius: var(--sif-radius-small); overflow: hidden;
+            background: var(--sif-surface); border: 1px solid var(--sif-border);
+        }
+        #SatIpFreesatStatusPage .sifMetricLabel { display: block; opacity: .72; font-size: .76em; }
+        #SatIpFreesatStatusPage .sifMetricValue {
+            display: block; margin-top: .12em; font-size: .96em; font-weight: 600;
+            overflow-wrap: anywhere; word-break: break-word;
+        }
+        #SatIpFreesatStatusPage .sifBadge {
+            display: inline-flex; align-items: center; min-height: 1.8em;
+            padding: .18em .58em; border: 1px solid var(--sif-border);
+            border-radius: 999px; background: var(--sif-surface-strong);
+            font-size: .82em; line-height: 1.2;
+        }
+        #SatIpFreesatStatusPage .sifBadgeGood { background: rgba(46,160,75,.18); border-color: rgba(46,160,75,.48); }
+        #SatIpFreesatStatusPage .sifBadgeWarn { background: rgba(215,135,28,.19); border-color: rgba(215,135,28,.52); }
+        #SatIpFreesatStatusPage .sifBadgeBad { background: rgba(205,55,55,.18); border-color: rgba(205,55,55,.5); }
+        #SatIpFreesatStatusPage .sifSection {
+            margin: 0 0 1em; border: 1px solid var(--sif-border);
+            border-radius: var(--sif-radius); background: var(--sif-surface); overflow: clip;
+        }
+        #SatIpFreesatStatusPage .sifSection > summary {
+            cursor: pointer; overflow-wrap: anywhere; padding: 1em 1.1em;
+            font-size: 1.08em; font-weight: 600; background: var(--sif-surface-strong);
+            -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+        }
+        #SatIpFreesatStatusPage .sifSection > summary:hover { filter: brightness(1.08); }
+        #SatIpFreesatStatusPage .sifSectionBody { padding: 1em 1.1em 1.1em; }
+        #SatIpFreesatStatusPage .sifTableWrap {
+            max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain;
+            -webkit-overflow-scrolling: touch; margin-top: .8em;
+            border: 1px solid var(--sif-border); border-radius: var(--sif-radius-small);
+        }
+        #SatIpFreesatStatusPage .sifTable { width: 100%; min-width: 480px; border-collapse: collapse; font-size: .92em; }
+        #SatIpFreesatStatusPage .sifTable th, #SatIpFreesatStatusPage .sifTable td {
+            text-align: left; padding: .55em .62em;
+            border-bottom: 1px solid var(--sif-divider); white-space: nowrap;
+        }
+        #SatIpFreesatStatusPage .sifTable th { background: var(--sif-surface-strong); font-weight: 600; }
+        #SatIpFreesatStatusPage .sifTable tbody tr:last-child td { border-bottom: 0; }
+        #SatIpFreesatStatusPage .sifEmpty {
+            padding: 1.2em; border-radius: var(--sif-radius); text-align: center;
+            overflow-wrap: anywhere; background: var(--sif-surface);
+            border: 1px solid var(--sif-border);
+        }
+        #SatIpFreesatStatusPage .sifInlineButtons { display: flex; flex-wrap: wrap; gap: .6em; }
+        #SatIpFreesatStatusPage .sifSrOnly {
+            position: absolute !important; width: 1px !important; height: 1px !important;
+            padding: 0 !important; margin: -1px !important; overflow: hidden !important;
+            clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important;
+        }
+        #SatIpFreesatStatusPage #btnRefreshStatus:focus-visible { outline: 2px solid var(--sif-focus); outline-offset: 2px; }
+        @media (max-width: 600px) {
+            #SatIpFreesatStatusPage .sifStatusHeader { align-items: stretch; }
+            #SatIpFreesatStatusPage .sifStatusHeader > div:first-child { flex: 1 1 100%; }
+            #SatIpFreesatStatusPage .sifInlineButtons, #SatIpFreesatStatusPage #btnRefreshStatus { width: 100%; }
+            #SatIpFreesatStatusPage .sifSummary { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 380px) {
+            #SatIpFreesatStatusPage .sifSummary { grid-template-columns: 1fr; }
+        }
+    </style>
+
+    <div data-role="content">
+        <div class="content-primary">
+            <div class="sifPageHeader">
+                <h2>SAT&gt;IP Freesat Status</h2>
+                <div class="sifMuted">Live device reachability, scan results, and channel overview. Settings live on the SAT&gt;IP Freesat configuration page.</div>
+            </div>
+
+            <div class="sifStatusHeader">
+                <div>
+                    <h2>Plugin status</h2>
+                    <div id="statusUpdated" class="sifMuted">Loading…</div>
+                    <div id="statusAnnouncer" class="sifSrOnly" role="status" aria-live="polite" aria-atomic="true"></div>
+                </div>
+                <div class="sifInlineButtons">
+                    <button is="emby-button" type="button" id="btnRefreshStatus" class="raised"><span>Refresh</span></button>
+                </div>
+            </div>
+
+            <div id="statusSummary" class="sifSummary" aria-label="Plugin summary"></div>
+
+            <details class="sifSection" open>
+                <summary>Device and connection</summary>
+                <div class="sifSectionBody">
+                    <div id="deviceDetail" class="sifSummary"></div>
+                </div>
+            </details>
+
+            <details class="sifSection" open>
+                <summary>Last scan results</summary>
+                <div class="sifSectionBody">
+                    <div id="scanDetail" class="sifSummary"></div>
+                    <div id="channelTable"></div>
+                </div>
+            </details>
+
+            <details class="sifSection">
+                <summary>Channel maintenance</summary>
+                <div class="sifSectionBody">
+                    <div class="fieldDescription" style="margin-bottom:.8em">"Rebuild channels" clears the cached channel list so the next scan fully replaces it. Useful after a partial or failed scan.</div>
+                    <div class="sifInlineButtons">
+                        <button is="emby-button" type="button" id="btnRebuildChannels" class="raised"><span>Rebuild channels</span></button>
+                    </div>
+                    <div id="rebuildResult" class="sifMuted" role="status" aria-live="polite" style="margin-top:.6em"></div>
+                </div>
+            </details>
+
+        </div>
+    </div>
+</div>

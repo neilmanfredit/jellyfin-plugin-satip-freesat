@@ -34,5 +34,15 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
             Name = $"{Name} JS",
             EmbeddedResourcePath = $"{GetType().Namespace}.Web.configpage.js",
         },
+        new PluginPageInfo
+        {
+            Name = $"{Name} Status",
+            EmbeddedResourcePath = $"{GetType().Namespace}.Web.statuspage.html",
+        },
+        new PluginPageInfo
+        {
+            Name = $"{Name} Status JS",
+            EmbeddedResourcePath = $"{GetType().Namespace}.Web.statuspage.js",
+        },
     ];
 }
