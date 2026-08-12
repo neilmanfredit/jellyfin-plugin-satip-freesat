@@ -117,7 +117,7 @@ export default function (view) {
             if (announcer) announcer.textContent = 'Refreshing SAT>IP Freesat status.';
         }
 
-        requestInFlight = ApiClient.getJSON(ApiClient.getUrl('SatIpFreesat/detailed-status'))
+        requestInFlight = ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('SatIpFreesat/detailed-status'), dataType: 'json' })
             .then(status => {
                 renderStatus(status);
                 if (showLoading && announcer) announcer.textContent = 'Status refreshed.';
