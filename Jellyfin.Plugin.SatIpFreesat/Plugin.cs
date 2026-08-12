@@ -26,22 +26,26 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     [
         new PluginPageInfo
         {
-            Name = Name,
+            Name = "satipfreesatconfig",
+            DisplayName = "SAT>IP Freesat",
             EmbeddedResourcePath = $"{GetType().Namespace}.Web.configpage.html",
+            EnableInMainMenu = true,
         },
         new PluginPageInfo
         {
-            Name = $"{Name} JS",
+            Name = "satipfreesatconfigjs",
             EmbeddedResourcePath = $"{GetType().Namespace}.Web.configpage.js",
         },
         new PluginPageInfo
         {
-            Name = $"{Name} Status",
+            Name = "satipfreesatstatus",
+            DisplayName = "SAT>IP Freesat Status",
             EmbeddedResourcePath = $"{GetType().Namespace}.Web.statuspage.html",
+            EnableInMainMenu = true,
         },
         new PluginPageInfo
         {
-            Name = $"{Name} Status JS",
+            Name = "satipfreesatstatusjs",
             EmbeddedResourcePath = $"{GetType().Namespace}.Web.statuspage.js",
         },
     ];
