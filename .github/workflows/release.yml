@@ -45,10 +45,22 @@ jobs:
       - name: Package net9.0
         run: |
           mkdir -p artifacts
+          # meta.json is required by Jellyfin 10.9+ plugin manager
+          jq -n \
+            --arg id   "9d4f3a1c-8c7e-4b5d-a6f0-2e9b1c8d7a3f" \
+            --arg name "SAT>IP Freesat" \
+            --arg desc "SAT>IP tuner and UK Freesat EPG source for Jellyfin. Scans DVB-S SI tables directly, selects the correct regional bouquet by postcode, and assigns proper Freesat LCNs. No tvheadend required." \
+            --arg over "SAT>IP tuner + UK Freesat EPG — no tvheadend required" \
+            --arg own  "neilmanfredit" \
+            --arg ver  "1.0.0.0" \
+            --arg abi  "10.9.0.0" \
+            --arg ts   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          '{id:$id, name:$name, description:$desc, overview:$over, owner:$own, version:$ver, targetAbi:$abi, timestamp:$ts}' \
+          > artifacts/meta.json
           cp publish/net9/$PLUGIN_DLL artifacts/
           cd artifacts
-          zip -j jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip $PLUGIN_DLL
-          rm $PLUGIN_DLL
+          zip -j jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip $PLUGIN_DLL meta.json
+          rm $PLUGIN_DLL meta.json
 
       # ── Jellyfin 12.x build (net10.0, assembly 2.0.0.0) ─────────────────
       - name: Build net10.0
@@ -56,10 +68,21 @@ jobs:
 
       - name: Package net10.0
         run: |
+          jq -n \
+            --arg id   "9d4f3a1c-8c7e-4b5d-a6f0-2e9b1c8d7a3f" \
+            --arg name "SAT>IP Freesat" \
+            --arg desc "SAT>IP tuner and UK Freesat EPG source for Jellyfin. Scans DVB-S SI tables directly, selects the correct regional bouquet by postcode, and assigns proper Freesat LCNs. No tvheadend required." \
+            --arg over "SAT>IP tuner + UK Freesat EPG — no tvheadend required" \
+            --arg own  "neilmanfredit" \
+            --arg ver  "2.0.0.0" \
+            --arg abi  "12.0.0.0" \
+            --arg ts   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          '{id:$id, name:$name, description:$desc, overview:$over, owner:$own, version:$ver, targetAbi:$abi, timestamp:$ts}' \
+          > artifacts/meta.json
           cp publish/net10/$PLUGIN_DLL artifacts/
           cd artifacts
-          zip -j jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip $PLUGIN_DLL
-          rm $PLUGIN_DLL
+          zip -j jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip $PLUGIN_DLL meta.json
+          rm $PLUGIN_DLL meta.json
 
       # ── Checksums ─────────────────────────────────────────────────────────
       - name: Compute checksums
