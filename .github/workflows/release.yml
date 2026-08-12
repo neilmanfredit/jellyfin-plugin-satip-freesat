@@ -25,6 +25,18 @@ jobs:
           fetch-depth: 0
           ref: main
 
+      - name: Derive plugin version from tag
+        id: ver
+        run: |
+          # v1.8.0 → 1.8.0 → 1.8.0.0
+          TAG="${GITHUB_REF_NAME}"
+          SHORT="${TAG#v}"
+          PLUGIN_VER="${SHORT}.0"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "short=$SHORT"     >> "$GITHUB_OUTPUT"
+          echo "plugin=$PLUGIN_VER" >> "$GITHUB_OUTPUT"
+          echo "Plugin version: $PLUGIN_VER"
+
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
@@ -38,93 +50,110 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      # ── Jellyfin 10.x build (net9.0, assembly 1.0.0.0) ─────────────────
+      # ── Jellyfin 10.x build (net9.0) ─────────────────────────────────────
       - name: Build net9.0
-        run: dotnet publish "$PLUGIN_PROJECT" -f net9.0 -c Release -o publish/net9 --no-restore
+        run: |
+          dotnet publish "$PLUGIN_PROJECT" -f net9.0 -c Release -o publish/net9 --no-restore \
+            -p:Version=${{ steps.ver.outputs.plugin }} \
+            -p:AssemblyVersion=${{ steps.ver.outputs.plugin }} \
+            -p:FileVersion=${{ steps.ver.outputs.plugin }}
 
       - name: Package net9.0
         run: |
           mkdir -p artifacts
-          # meta.json is required by Jellyfin 10.9+ plugin manager
+          ZIP="jellyfin-plugin-satip-freesat-${{ steps.ver.outputs.tag }}-jellyfin10.zip"
           jq -n \
             --arg id   "9d4f3a1c-8c7e-4b5d-a6f0-2e9b1c8d7a3f" \
             --arg name "SAT>IP Freesat" \
             --arg desc "SAT>IP tuner and UK Freesat EPG source for Jellyfin. Scans DVB-S SI tables directly, selects the correct regional bouquet by postcode, and assigns proper Freesat LCNs. No tvheadend required." \
             --arg over "SAT>IP tuner + UK Freesat EPG — no tvheadend required" \
             --arg own  "neilmanfredit" \
-            --arg ver  "1.0.0.0" \
+            --arg ver  "${{ steps.ver.outputs.plugin }}" \
             --arg abi  "10.9.0.0" \
             --arg ts   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
           '{id:$id, name:$name, description:$desc, overview:$over, owner:$own, version:$ver, targetAbi:$abi, timestamp:$ts}' \
           > artifacts/meta.json
           cp publish/net9/$PLUGIN_DLL artifacts/
-          cd artifacts
-          zip -j jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip $PLUGIN_DLL meta.json
-          rm $PLUGIN_DLL meta.json
+          cd artifacts && zip -j "$ZIP" $PLUGIN_DLL meta.json && rm $PLUGIN_DLL meta.json
 
-      # ── Jellyfin 12.x build (net10.0, assembly 2.0.0.0) ─────────────────
+      # ── Jellyfin 12.x build (net10.0) ────────────────────────────────────
       - name: Build net10.0
-        run: dotnet publish "$PLUGIN_PROJECT" -f net10.0 -c Release -o publish/net10 --no-restore
+        run: |
+          dotnet publish "$PLUGIN_PROJECT" -f net10.0 -c Release -o publish/net10 --no-restore \
+            -p:Version=${{ steps.ver.outputs.plugin }} \
+            -p:AssemblyVersion=${{ steps.ver.outputs.plugin }} \
+            -p:FileVersion=${{ steps.ver.outputs.plugin }}
 
       - name: Package net10.0
         run: |
+          ZIP="jellyfin-plugin-satip-freesat-${{ steps.ver.outputs.tag }}-jellyfin12.zip"
           jq -n \
             --arg id   "9d4f3a1c-8c7e-4b5d-a6f0-2e9b1c8d7a3f" \
             --arg name "SAT>IP Freesat" \
             --arg desc "SAT>IP tuner and UK Freesat EPG source for Jellyfin. Scans DVB-S SI tables directly, selects the correct regional bouquet by postcode, and assigns proper Freesat LCNs. No tvheadend required." \
             --arg over "SAT>IP tuner + UK Freesat EPG — no tvheadend required" \
             --arg own  "neilmanfredit" \
-            --arg ver  "2.0.0.0" \
+            --arg ver  "${{ steps.ver.outputs.plugin }}" \
             --arg abi  "12.0.0.0" \
             --arg ts   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
           '{id:$id, name:$name, description:$desc, overview:$over, owner:$own, version:$ver, targetAbi:$abi, timestamp:$ts}' \
           > artifacts/meta.json
           cp publish/net10/$PLUGIN_DLL artifacts/
-          cd artifacts
-          zip -j jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip $PLUGIN_DLL meta.json
-          rm $PLUGIN_DLL meta.json
+          cd artifacts && zip -j "$ZIP" $PLUGIN_DLL meta.json && rm $PLUGIN_DLL meta.json
 
       # ── Checksums ─────────────────────────────────────────────────────────
       - name: Compute checksums
         id: checksums
         run: |
-          MD5_10=$(md5sum artifacts/jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip | awk '{print $1}')
-          MD5_12=$(md5sum artifacts/jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip | awk '{print $1}')
+          TAG="${{ steps.ver.outputs.tag }}"
+          ZIP10="artifacts/jellyfin-plugin-satip-freesat-${TAG}-jellyfin10.zip"
+          ZIP12="artifacts/jellyfin-plugin-satip-freesat-${TAG}-jellyfin12.zip"
+          MD5_10=$(md5sum "$ZIP10" | awk '{print $1}')
+          MD5_12=$(md5sum "$ZIP12" | awk '{print $1}')
           echo "md5_10=$MD5_10" >> "$GITHUB_OUTPUT"
           echo "md5_12=$MD5_12" >> "$GITHUB_OUTPUT"
-          echo "Jellyfin 10.x checksum: $MD5_10"
-          echo "Jellyfin 12.x checksum: $MD5_12"
+          echo "zip10=$ZIP10"   >> "$GITHUB_OUTPUT"
+          echo "zip12=$ZIP12"   >> "$GITHUB_OUTPUT"
+          echo "Jellyfin 10.x ($ZIP10): $MD5_10"
+          echo "Jellyfin 12.x ($ZIP12): $MD5_12"
 
       # ── Update docs/manifest.json ─────────────────────────────────────────
-      - name: Update manifest checksums
+      - name: Update manifest
         env:
-          TAG: ${{ github.ref_name }}
-          MD5_10: ${{ steps.checksums.outputs.md5_10 }}
-          MD5_12: ${{ steps.checksums.outputs.md5_12 }}
+          TAG:        ${{ steps.ver.outputs.tag }}
+          PLUGIN_VER: ${{ steps.ver.outputs.plugin }}
+          MD5_10:     ${{ steps.checksums.outputs.md5_10 }}
+          MD5_12:     ${{ steps.checksums.outputs.md5_12 }}
         run: |
-          jq --arg md5_10 "$MD5_10" \
+          BASE="https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/${TAG}"
+          URL_10="${BASE}/jellyfin-plugin-satip-freesat-${TAG}-jellyfin10.zip"
+          URL_12="${BASE}/jellyfin-plugin-satip-freesat-${TAG}-jellyfin12.zip"
+          TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          # Update the entry matching each targetAbi — version, checksum, sourceUrl, timestamp all change
+          jq --arg ver    "$PLUGIN_VER" \
+             --arg md5_10 "$MD5_10" \
              --arg md5_12 "$MD5_12" \
-             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-             --arg tag "$TAG" \
-             --arg url_10 "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/${TAG}/jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip" \
-             --arg url_12 "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/${TAG}/jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip" \
+             --arg url_10 "$URL_10" \
+             --arg url_12 "$URL_12" \
+             --arg ts     "$TS" \
           '.[0].versions |= map(
-            if .version == "1.0.0.0" then
-              .checksum = $md5_10 | .sourceUrl = $url_10 | .timestamp = $ts
-            elif .version == "2.0.0.0" then
-              .checksum = $md5_12 | .sourceUrl = $url_12 | .timestamp = $ts
+            if .targetAbi == "10.9.0.0" then
+              .version = $ver | .checksum = $md5_10 | .sourceUrl = $url_10 | .timestamp = $ts
+            elif .targetAbi == "12.0.0.0" then
+              .version = $ver | .checksum = $md5_12 | .sourceUrl = $url_12 | .timestamp = $ts
             else . end
           )' docs/manifest.json > docs/manifest.json.tmp
           mv docs/manifest.json.tmp docs/manifest.json
 
       - name: Commit and push manifest
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/manifest.json
-          git diff --staged --quiet || git commit -m "chore: update manifest checksums for ${TAG}"
+          git diff --staged --quiet || git commit -m "chore: update manifest for ${TAG}"
           git push origin HEAD:main
 
       # ── GitHub Release ────────────────────────────────────────────────────
@@ -135,14 +164,14 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            artifacts/jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip
-            artifacts/jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip
+            ${{ steps.checksums.outputs.zip10 }}
+            ${{ steps.checksums.outputs.zip12 }}
           body: |
             ## Jellyfin compatibility
 
             | Zip file | Jellyfin version | .NET |
             |----------|-----------------|------|
-            | `jellyfin-plugin-satip-freesat-v1.0.0.0-jellyfin10.zip` | 10.11.x | net9.0 |
-            | `jellyfin-plugin-satip-freesat-v2.0.0.0-jellyfin12.zip` | 12.x | net10.0 |
+            | `jellyfin-plugin-satip-freesat-${{ steps.ver.outputs.tag }}-jellyfin10.zip` | 10.9+ | net9.0 |
+            | `jellyfin-plugin-satip-freesat-${{ steps.ver.outputs.tag }}-jellyfin12.zip` | 12.x | net10.0 |
 
             Install via the plugin repository: add `https://neilmanfredit.github.io/jellyfin-plugin-satip-freesat/manifest.json` to **Dashboard → Plugins → Repositories**.
