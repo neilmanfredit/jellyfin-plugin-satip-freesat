@@ -24,6 +24,9 @@ public sealed class RtspClient : IAsyncDisposable
     private string? _sessionId;
     private string? _controlUrl;
 
+    /// <summary>Session keep-alive timeout parsed from the SETUP response. Default 60 s.</summary>
+    public TimeSpan SessionTimeout { get; private set; } = TimeSpan.FromSeconds(60);
+
     public RtspClient(string host, int port, ILogger logger)
     {
         _host = host;
@@ -166,13 +169,27 @@ public sealed class RtspClient : IAsyncDisposable
             ["Transport"] = "RTP/AVP/TCP;unicast;interleaved=0-1",
         }, ct).ConfigureAwait(false);
 
-        // Extract session ID
+        // Extract session ID and optional timeout from "Session: id[;timeout=N]"
         if (response.Headers.TryGetValue("session", out var sess))
-            _sessionId = sess.Split(';')[0].Trim();
+        {
+            var parts = sess.Split(';');
+            _sessionId = parts[0].Trim();
+            foreach (var part in parts[1..])
+            {
+                var kv = part.Trim().Split('=', 2);
+                if (kv.Length == 2 &&
+                    kv[0].Trim().Equals("timeout", StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(kv[1].Trim(), out var secs) && secs > 0)
+                {
+                    SessionTimeout = TimeSpan.FromSeconds(secs);
+                }
+            }
+        }
 
         response.Headers.TryGetValue("transport", out var transport);
-        _logger.LogInformation("SAT>IP RTSP SETUP: status={Code} session={Session} transport={Transport}",
-            response.StatusCode, _sessionId ?? "(none)", transport ?? "(none)");
+        _logger.LogInformation(
+            "SAT>IP RTSP SETUP: status={Code} session={Session} timeout={Timeout}s transport={Transport}",
+            response.StatusCode, _sessionId ?? "(none)", (int)SessionTimeout.TotalSeconds, transport ?? "(none)");
     }
 
     private async Task PlayAsync(CancellationToken ct)
@@ -306,6 +323,18 @@ public sealed class RtspClient : IAsyncDisposable
         }
         // Fallback: use the DESCRIBE URL (device will recognise it as the active stream)
         return describeUrl;
+    }
+
+    /// <summary>
+    /// Sends a GET_PARAMETER keep-alive to prevent the device from closing the session.
+    /// Safe to call concurrently with ReadRtpPacketAsync — NetworkStream supports simultaneous
+    /// read and write from different tasks.
+    /// </summary>
+    public async Task SendKeepAliveAsync(CancellationToken ct)
+    {
+        if (_controlUrl is null || _sessionId is null) return;
+        try { await SendRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false); }
+        catch { /* best-effort; stream-read loop will detect closure */ }
     }
 
     public async ValueTask DisposeAsync()

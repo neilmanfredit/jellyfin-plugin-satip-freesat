@@ -228,8 +228,28 @@ public sealed class FreesatScanner
     private static async Task ReadStreamAsync(
         RtspClient client, TsReader reader, TimeSpan timeout, CancellationToken ct)
     {
+        // Send periodic GET_PARAMETER keep-alives so the device doesn't time out the session.
+        // Interval = half the negotiated timeout (floor 1 s). The keep-alive response arrives
+        // as a plain RTSP message on the same TCP channel; ReadRtpPacketAsync skips it safely.
+        var keepAliveInterval = TimeSpan.FromSeconds(
+            Math.Max(client.SessionTimeout.TotalSeconds / 2.0, 1.0));
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
+
+        var keepAliveTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    await Task.Delay(keepAliveInterval, cts.Token).ConfigureAwait(false);
+                    await client.SendKeepAliveAsync(cts.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) { }
+        }, cts.Token);
+
         try
         {
             while (!cts.IsCancellationRequested)
@@ -243,6 +263,11 @@ public sealed class FreesatScanner
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             // normal timeout
+        }
+        finally
+        {
+            await cts.CancelAsync().ConfigureAwait(false);
+            try { await keepAliveTask.ConfigureAwait(false); } catch { }
         }
     }
 
