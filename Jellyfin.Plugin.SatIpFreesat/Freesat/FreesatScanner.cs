@@ -9,6 +9,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SatIpFreesat.Freesat;
 
+public sealed record ScanProgress(string Message, int? Percent);
+
 /// <summary>
 /// Orchestrates a full Freesat channel scan:
 ///   1. Tune bootstrap mux (11425H) and read NIT → discover all muxes
@@ -35,7 +37,7 @@ public sealed class FreesatScanner
 
     public async Task<ScanResult> ScanAsync(
         string host, int rtspPort, int frontendNumber, string regionKey,
-        IProgress<string>? progress,
+        IProgress<ScanProgress>? progress,
         CancellationToken ct)
     {
         var region = RegionData.Regions.TryGetValue(regionKey, out var r)
@@ -43,18 +45,18 @@ public sealed class FreesatScanner
 
         _logger.LogInformation("SAT>IP Freesat scan: host={Host} region={Region}", host, region.Label);
 
-        // Step 1: tune bootstrap mux, collect NIT + BAT
-        progress?.Report("Reading network and bouquet tables from bootstrap mux…");
+        // Step 1: tune bootstrap mux, collect NIT + BAT (indeterminate — total mux count unknown)
+        progress?.Report(new("Reading network and bouquet tables from bootstrap mux…", null));
         var (muxes, bouquets) = await CollectNitAndBatAsync(host, rtspPort, frontendNumber, ct).ConfigureAwait(false);
         _logger.LogInformation("SAT>IP: discovered {MuxCount} muxes, {BouquetCount} bouquets", muxes.Count, bouquets.Count);
 
-        // Step 2: collect SDT from each mux (services)
-        progress?.Report($"Discovered {muxes.Count} muxes — scanning services on each…");
+        // Step 2: collect SDT from each mux (determinate — percent reported per mux)
+        progress?.Report(new($"Discovered {muxes.Count} muxes — scanning services on each…", 0));
         var allServices = await CollectSdtAsync(host, rtspPort, frontendNumber, muxes, progress, ct).ConfigureAwait(false);
         _logger.LogInformation("SAT>IP: discovered {ServiceCount} services", allServices.Count);
 
-        // Step 3: build Freesat channel list
-        progress?.Report($"Building channel list from {allServices.Count} services…");
+        // Step 3: build Freesat channel list (fast — show 99% until tracker marks complete)
+        progress?.Report(new($"Building channel list from {allServices.Count} services…", 99));
         var channels = BuildChannelList(allServices, bouquets, regionKey, region);
         _logger.LogInformation("SAT>IP: built {ChannelCount} Freesat channels", channels.Count);
 
@@ -115,7 +117,7 @@ public sealed class FreesatScanner
 
     private async Task<List<ServiceInfo>> CollectSdtAsync(
         string host, int port, int frontend,
-        List<MuxInfo> muxes, IProgress<string>? progress, CancellationToken ct)
+        List<MuxInfo> muxes, IProgress<ScanProgress>? progress, CancellationToken ct)
     {
         var allServices = new List<ServiceInfo>();
 
@@ -130,7 +132,9 @@ public sealed class FreesatScanner
         {
             var mux = ordered[i];
             if (ct.IsCancellationRequested) break;
-            progress?.Report($"Scanning mux {i + 1} of {total} ({mux.FrequencyMHz:F3} MHz {mux.Polarization})…");
+            // Reserve 0–95% for mux scanning; step 3 takes 99%
+            int percent = total > 1 ? (int)Math.Round(i * 95.0 / total) : 0;
+            progress?.Report(new($"Scanning mux {i + 1} of {total} ({mux.FrequencyMHz:F3} MHz {mux.Polarization})…", percent));
             try
             {
                 var services = await CollectSdtFromMuxAsync(host, port, frontend, mux, ct).ConfigureAwait(false);
