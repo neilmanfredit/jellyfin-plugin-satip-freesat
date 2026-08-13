@@ -157,7 +157,7 @@
                         <div class="sifInlineButtons">
                             <button is="emby-button" type="button" id="btnScan" class="raised"><span>Scan for channels</span></button>
                         </div>
-                        <div id="scanSpinner" style="display:none;margin-top:.5em;font-style:italic;opacity:.8">Scanning — this may take several minutes…</div>
+                        <progress id="scanProgress" max="100" style="display:none;width:100%;margin-top:.6em;accent-color:currentColor"></progress>
                         <div class="inputContainer" style="margin-top:1em;max-width:240px">
                             <input is="emby-input" type="number" min="0" max="168" id="autoScanIntervalHours" label="Auto-rescan interval (hours)" />
                             <div class="fieldDescription">0 = manual only.</div>

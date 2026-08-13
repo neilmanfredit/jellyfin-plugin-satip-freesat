@@ -5,6 +5,7 @@
 export default function (view) {
     let pollTimer = null;
     let requestInFlight = null;
+    let _scanRunning = false;
 
     function escapeHtml(s) {
         return String(s == null ? '' : s)
@@ -24,8 +25,10 @@ export default function (view) {
     function fmtTime(iso) {
         if (!iso) return '—';
         try {
-            const d = new Date(iso);
-            return isNaN(d) ? iso : d.toLocaleString();
+            // C# "O" format emits 7 fractional-second digits; JS Date requires ≤3
+            const s = String(iso).replace(/(\.\d{3})\d+(Z?)$/, '$1$2');
+            const d = new Date(s);
+            return isNaN(d.getTime()) ? iso : d.toLocaleString();
         } catch { return iso; }
     }
 
@@ -106,7 +109,8 @@ export default function (view) {
             view.querySelector('#channelTable').innerHTML = '';
         }
 
-        view.querySelector('#statusUpdated').textContent = `Updated ${new Date(status.generatedUtc).toLocaleTimeString()}`;
+        const updatedAt = (() => { try { const s = String(status.generatedUtc || '').replace(/(\.\d{3})\d+(Z?)$/, '$1$2'); const d = new Date(s); return isNaN(d.getTime()) ? '—' : d.toLocaleTimeString(); } catch { return '—'; } })();
+        view.querySelector('#statusUpdated').textContent = `Updated ${updatedAt}`;
     }
 
     function loadStatus(showLoading) {
@@ -117,10 +121,21 @@ export default function (view) {
             if (announcer) announcer.textContent = 'Refreshing SAT>IP Freesat status.';
         }
 
-        requestInFlight = ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('SatIpFreesat/detailed-status'), dataType: 'json' })
-            .then(status => {
+        // Fetch scan progress and detailed status in parallel
+        requestInFlight = Promise.all([
+            ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('SatIpFreesat/detailed-status'), dataType: 'json' }),
+            ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('SatIpFreesat/scan/progress'), dataType: 'json' }).catch(() => null),
+        ])
+            .then(([status, prog]) => {
                 renderStatus(status);
                 if (showLoading && announcer) announcer.textContent = 'Status refreshed.';
+
+                // Adjust poll rate: fast while a scan is running, slow otherwise
+                const nowScanning = prog?.state === 'scanning';
+                if (nowScanning !== _scanRunning) {
+                    _scanRunning = nowScanning;
+                    reschedulePoller();
+                }
             })
             .catch(err => {
                 const msg = err?.message || String(err);
@@ -136,8 +151,15 @@ export default function (view) {
         return requestInFlight;
     }
 
+    function reschedulePoller() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        const interval = _scanRunning ? 2000 : 10000;
+        pollTimer = setInterval(() => loadStatus(false), interval);
+    }
+
     function startPolling() {
         stopPolling();
+        _scanRunning = false;
         loadStatus(true);
         pollTimer = setInterval(() => loadStatus(false), 10000);
     }

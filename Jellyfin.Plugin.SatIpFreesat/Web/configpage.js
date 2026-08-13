@@ -184,15 +184,25 @@ export default function (view) {
 
     async function pollScanProgress() {
         const statusEl = view.querySelector('#scanStatus');
-        const spinner = view.querySelector('#scanSpinner');
+        const progressEl = view.querySelector('#scanProgress');
         const btn = view.querySelector('#btnScan');
         try {
             const data = await apiGet('SatIpFreesat/scan/progress');
             statusEl.textContent = 'Status: ' + (data.message || '—');
             const scanning = data.state === 'scanning';
-            spinner.style.display = scanning ? '' : 'none';
             btn.disabled = scanning;
-            if (!scanning) stopPolling();
+            if (scanning) {
+                progressEl.style.display = '';
+                if (data.percent == null) {
+                    progressEl.removeAttribute('value'); // indeterminate pulse
+                } else {
+                    progressEl.value = data.percent;
+                }
+            } else {
+                if (data.state === 'done') progressEl.value = 100;
+                progressEl.style.display = data.state === 'idle' ? 'none' : '';
+                stopPolling();
+            }
         } catch { /* ignore transient errors; keep polling */ }
     }
 
@@ -202,7 +212,6 @@ export default function (view) {
             const data = await apiGet('SatIpFreesat/scan/progress');
             el.textContent = 'Status: ' + (data.message || '—');
             if (data.state === 'scanning') {
-                view.querySelector('#scanSpinner').style.display = '';
                 view.querySelector('#btnScan').disabled = true;
                 startPolling();
             }

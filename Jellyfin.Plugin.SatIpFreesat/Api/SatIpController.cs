@@ -94,7 +94,7 @@ public sealed class SatIpController : ControllerBase
         {
             try
             {
-                var progress = new Progress<string>(msg => _scanJob.Update(msg));
+                var progress = new Progress<ScanProgress>(p => _scanJob.Update(p.Message, p.Percent));
                 var result = await scanner.ScanAsync(host, port, frontend, regionKey, progress, CancellationToken.None)
                     .ConfigureAwait(false);
 
@@ -223,6 +223,7 @@ public sealed class SatIpController : ControllerBase
         private string _state = "idle";
         private string _message = "No scan run yet — click Scan to begin";
         private int _channelCount;
+        private int? _percent;
         private readonly object _lock = new();
 
         public bool TryStart()
@@ -233,25 +234,26 @@ public sealed class SatIpController : ControllerBase
                 _state = "scanning";
                 _message = "Starting scan…";
                 _channelCount = 0;
+                _percent = null;
                 return true;
             }
         }
 
-        public void Update(string message) { lock (_lock) { _message = message; } }
+        public void Update(string message, int? percent) { lock (_lock) { _message = message; _percent = percent; } }
 
         public void Complete(int count, string message)
         {
-            lock (_lock) { _state = "done"; _channelCount = count; _message = message; }
+            lock (_lock) { _state = "done"; _channelCount = count; _message = message; _percent = 100; }
         }
 
         public void Fail(string message)
         {
-            lock (_lock) { _state = "failed"; _message = message; }
+            lock (_lock) { _state = "failed"; _message = message; _percent = null; }
         }
 
         public ScanProgressResponse GetProgress()
         {
-            lock (_lock) { return new ScanProgressResponse(_state, _message, _channelCount); }
+            lock (_lock) { return new ScanProgressResponse(_state, _message, _channelCount, _percent); }
         }
     }
 
@@ -260,7 +262,7 @@ public sealed class SatIpController : ControllerBase
     public sealed record ResolveRegionResponse(string RegionKey, string RegionLabel);
     public sealed record RegionListItem(string Key, string Label);
     public sealed record ScanStatusResponse(bool HasChannels, int ChannelCount, string Message);
-    public sealed record ScanProgressResponse(string State, string Message, int ChannelCount);
+    public sealed record ScanProgressResponse(string State, string Message, int ChannelCount, int? Percent = null);
     public sealed record TunerRow(int Index, int RtspPort, int FrontendNumber, string DiSEqCPort, string SatelliteLabel);
     public sealed record ChannelRow(int Number, string Name, bool IsHD, bool IsRadio, double FrequencyMHz);
 
