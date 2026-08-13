@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -11,7 +12,9 @@ namespace Jellyfin.Plugin.SatIpFreesat.SatIp;
 
 /// <summary>
 /// Minimal RTSP/1.0 client implementing the SAT>IP tuning protocol (ETSI TS 102 034).
-/// Supports interleaved RTP-over-TCP for reading the MPEG-TS stream during SI scanning.
+/// Supports both RTP-over-TCP (interleaved) and RTP-over-UDP unicast for SI scanning.
+/// Call <see cref="EnableUdpTransport"/> before <see cref="SetupAndPlayAsync"/> to switch
+/// to UDP delivery; otherwise TCP interleaved is used.
 /// </summary>
 public sealed class RtspClient : IAsyncDisposable
 {
@@ -20,12 +23,16 @@ public sealed class RtspClient : IAsyncDisposable
     private readonly ILogger _logger;
     private TcpClient? _tcp;
     private NetworkStream? _stream;
+    private UdpClient? _udpReceiver;
     private int _cseq;
     private string? _sessionId;
     private string? _controlUrl;
 
     /// <summary>Session keep-alive timeout parsed from the SETUP response. Default 60 s.</summary>
     public TimeSpan SessionTimeout { get; private set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>True when UDP transport was enabled and SETUP agreed to it.</summary>
+    public bool IsUdpMode => _udpReceiver is not null;
 
     public RtspClient(string host, int port, ILogger logger)
     {
@@ -40,6 +47,18 @@ public sealed class RtspClient : IAsyncDisposable
         await _tcp.ConnectAsync(_host, _port, ct).ConfigureAwait(false);
         _stream = _tcp.GetStream();
         _logger.LogDebug("SAT>IP RTSP: connected to {Host}:{Port}", _host, _port);
+    }
+
+    /// <summary>
+    /// Switches to UDP transport for RTP delivery. Must be called before
+    /// <see cref="SetupAndPlayAsync"/>. RTSP signalling still uses TCP.
+    /// </summary>
+    public void EnableUdpTransport()
+    {
+        _udpReceiver?.Dispose();
+        _udpReceiver = new UdpClient(0); // bind to OS-assigned local port
+        var localPort = ((IPEndPoint)_udpReceiver.Client.LocalEndPoint!).Port;
+        _logger.LogInformation("SAT>IP: UDP transport enabled, local port {Port}", localPort);
     }
 
     /// <summary>
@@ -63,9 +82,7 @@ public sealed class RtspClient : IAsyncDisposable
         return _sessionId ?? string.Empty;
     }
 
-    /// <summary>
-    /// Sends RTSP TEARDOWN and closes the connection.
-    /// </summary>
+    /// <summary>Sends RTSP TEARDOWN and closes the connection.</summary>
     public async Task TeardownAsync(CancellationToken ct = default)
     {
         if (_controlUrl is not null && _sessionId is not null)
@@ -76,11 +93,31 @@ public sealed class RtspClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Reads a single interleaved RTP packet from the TCP stream.
-    /// Returns the raw MPEG-TS payload (RTP header stripped).
-    /// Returns null on stream end or RTSP data.
+    /// Reads a single RTP payload (MPEG-TS data, RTP header stripped).
+    /// Returns null when the stream ends; returns empty when a non-data frame was skipped.
+    /// Dispatches to UDP or TCP interleaved depending on how SETUP was configured.
     /// </summary>
-    public async Task<byte[]?> ReadRtpPacketAsync(CancellationToken ct)
+    public Task<byte[]?> ReadRtpPacketAsync(CancellationToken ct) =>
+        _udpReceiver is not null
+            ? ReadRtpPacketUdpAsync(ct)
+            : ReadRtpPacketTcpAsync(ct);
+
+    /// <summary>
+    /// Sends a GET_PARAMETER keep-alive over the RTSP TCP channel.
+    /// In UDP mode this is safe to call concurrently with ReadRtpPacketAsync because
+    /// data arrives on a separate UDP socket. In TCP mode, the keep-alive response
+    /// arrives as a plain RTSP message and is skipped by the interleaved read loop.
+    /// </summary>
+    public async Task SendKeepAliveAsync(CancellationToken ct)
+    {
+        if (_controlUrl is null || _sessionId is null) return;
+        try { await SendRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false); }
+        catch { /* best-effort; stream-read loop will detect closure */ }
+    }
+
+    // ---- private: transport ----
+
+    private async Task<byte[]?> ReadRtpPacketTcpAsync(CancellationToken ct)
     {
         if (_stream is null) throw new InvalidOperationException("Not connected");
 
@@ -96,9 +133,9 @@ public sealed class RtspClient : IAsyncDisposable
 
         if (header[0] != 0x24) // '$'
         {
-            // Got an RTSP response or stray bytes - skip to end of headers
+            // Got an RTSP message (e.g. keep-alive response) — skip to end of headers
             await SkipRtspResponseAsync(ct).ConfigureAwait(false);
-            return Array.Empty<byte>(); // signal "skip" not "stream ended"
+            return Array.Empty<byte>();
         }
 
         int channel = header[1];
@@ -112,18 +149,26 @@ public sealed class RtspClient : IAsyncDisposable
             got += n;
         }
 
-        // Channel 1 = RTCP (keep-alives, ignore payload); channel 0 = RTP data
-        // Return empty (not null) so callers can continue reading rather than terminating the loop.
+        // Channel 1 = RTCP; channel 0 = RTP data
         if (channel != 0) return Array.Empty<byte>();
 
-        // Strip 12-byte RTP fixed header
+        return StripRtpHeader(packet, length);
+    }
+
+    private async Task<byte[]?> ReadRtpPacketUdpAsync(CancellationToken ct)
+    {
+        var result = await _udpReceiver!.ReceiveAsync(ct).ConfigureAwait(false);
+        var pkt = result.Buffer;
+        return StripRtpHeader(pkt, pkt.Length);
+    }
+
+    private static byte[]? StripRtpHeader(byte[] packet, int length)
+    {
         if (length < 12) return null;
 
-        // Account for CSRC list (CC * 4 bytes after the fixed header)
         int cc = packet[0] & 0x0F;
         int rtpHeaderLen = 12 + cc * 4;
 
-        // Extension header
         if ((packet[0] & 0x10) != 0 && length > rtpHeaderLen + 3)
         {
             int extLen = ((packet[rtpHeaderLen + 2] << 8) | packet[rtpHeaderLen + 3]) * 4 + 4;
@@ -134,7 +179,7 @@ public sealed class RtspClient : IAsyncDisposable
         return packet[rtpHeaderLen..];
     }
 
-    // ---- private ----
+    // ---- private: RTSP ----
 
     private string BuildDescribeUrl(SatIpMuxParams mux, string pids)
     {
@@ -164,9 +209,21 @@ public sealed class RtspClient : IAsyncDisposable
     private async Task SetupAsync(CancellationToken ct)
     {
         var url = _controlUrl ?? throw new InvalidOperationException("No control URL from DESCRIBE");
+
+        string transportHeader;
+        if (_udpReceiver is not null)
+        {
+            var localPort = ((IPEndPoint)_udpReceiver.Client.LocalEndPoint!).Port;
+            transportHeader = $"RTP/AVP;unicast;client_port={localPort}-{localPort + 1}";
+        }
+        else
+        {
+            transportHeader = "RTP/AVP/TCP;unicast;interleaved=0-1";
+        }
+
         var response = await SendRequestAsync("SETUP", url, new Dictionary<string, string>
         {
-            ["Transport"] = "RTP/AVP/TCP;unicast;interleaved=0-1",
+            ["Transport"] = transportHeader,
         }, ct).ConfigureAwait(false);
 
         // Extract session ID and optional timeout from "Session: id[;timeout=N]"
@@ -326,22 +383,11 @@ public sealed class RtspClient : IAsyncDisposable
         return describeUrl;
     }
 
-    /// <summary>
-    /// Sends a GET_PARAMETER keep-alive to prevent the device from closing the session.
-    /// Safe to call concurrently with ReadRtpPacketAsync — NetworkStream supports simultaneous
-    /// read and write from different tasks.
-    /// </summary>
-    public async Task SendKeepAliveAsync(CancellationToken ct)
-    {
-        if (_controlUrl is null || _sessionId is null) return;
-        try { await SendRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false); }
-        catch { /* best-effort; stream-read loop will detect closure */ }
-    }
-
     public async ValueTask DisposeAsync()
     {
         if (_stream is not null) await _stream.DisposeAsync().ConfigureAwait(false);
         _tcp?.Dispose();
+        _udpReceiver?.Dispose();
     }
 
     private sealed record RtspResponse(int StatusCode, Dictionary<string, string> Headers, string Body);
