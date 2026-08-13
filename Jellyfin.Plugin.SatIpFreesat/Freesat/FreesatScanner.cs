@@ -35,6 +35,7 @@ public sealed class FreesatScanner
 
     public async Task<ScanResult> ScanAsync(
         string host, int rtspPort, int frontendNumber, string regionKey,
+        IProgress<string>? progress,
         CancellationToken ct)
     {
         var region = RegionData.Regions.TryGetValue(regionKey, out var r)
@@ -43,14 +44,17 @@ public sealed class FreesatScanner
         _logger.LogInformation("SAT>IP Freesat scan: host={Host} region={Region}", host, region.Label);
 
         // Step 1: tune bootstrap mux, collect NIT + BAT
+        progress?.Report("Reading network and bouquet tables from bootstrap mux…");
         var (muxes, bouquets) = await CollectNitAndBatAsync(host, rtspPort, frontendNumber, ct).ConfigureAwait(false);
         _logger.LogInformation("SAT>IP: discovered {MuxCount} muxes, {BouquetCount} bouquets", muxes.Count, bouquets.Count);
 
         // Step 2: collect SDT from each mux (services)
-        var allServices = await CollectSdtAsync(host, rtspPort, frontendNumber, muxes, ct).ConfigureAwait(false);
+        progress?.Report($"Discovered {muxes.Count} muxes — scanning services on each…");
+        var allServices = await CollectSdtAsync(host, rtspPort, frontendNumber, muxes, progress, ct).ConfigureAwait(false);
         _logger.LogInformation("SAT>IP: discovered {ServiceCount} services", allServices.Count);
 
         // Step 3: build Freesat channel list
+        progress?.Report($"Building channel list from {allServices.Count} services…");
         var channels = BuildChannelList(allServices, bouquets, regionKey, region);
         _logger.LogInformation("SAT>IP: built {ChannelCount} Freesat channels", channels.Count);
 
@@ -111,7 +115,7 @@ public sealed class FreesatScanner
 
     private async Task<List<ServiceInfo>> CollectSdtAsync(
         string host, int port, int frontend,
-        List<MuxInfo> muxes, CancellationToken ct)
+        List<MuxInfo> muxes, IProgress<string>? progress, CancellationToken ct)
     {
         var allServices = new List<ServiceInfo>();
 
@@ -121,9 +125,12 @@ public sealed class FreesatScanner
             .ToList();
 
         // Limit scan to first 30 muxes to avoid extremely long waits
-        foreach (var mux in ordered.Take(30))
+        var total = Math.Min(ordered.Count, 30);
+        for (int i = 0; i < total; i++)
         {
+            var mux = ordered[i];
             if (ct.IsCancellationRequested) break;
+            progress?.Report($"Scanning mux {i + 1} of {total} ({mux.FrequencyMHz:F3} MHz {mux.Polarization})…");
             try
             {
                 var services = await CollectSdtFromMuxAsync(host, port, frontend, mux, ct).ConfigureAwait(false);
