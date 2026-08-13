@@ -22,6 +22,9 @@ public sealed class SatIpController : ControllerBase
     private readonly FreesatChannelStore _store;
     private readonly ILogger<SatIpController> _logger;
 
+    // Shared across all controller instances (controllers are transient)
+    private static readonly ScanJobTracker _scanJob = new();
+
     public SatIpController(
         FreesatScanner scanner,
         FreesatChannelStore store,
@@ -57,9 +60,7 @@ public sealed class SatIpController : ControllerBase
     }
 
     [HttpPost("scan")]
-    public async Task<ActionResult<ScanStatusResponse>> TriggerScan(
-        [FromBody] ScanRequest request,
-        CancellationToken ct)
+    public ActionResult<ScanProgressResponse> TriggerScan([FromBody] ScanRequest request)
     {
         var cfg = Plugin.Instance?.Configuration;
         if (cfg is null) return StatusCode((int)HttpStatusCode.InternalServerError, "Plugin not loaded");
@@ -68,6 +69,9 @@ public sealed class SatIpController : ControllerBase
             return BadRequest("serverAddress required");
         if (string.IsNullOrWhiteSpace(request.RegionKey) || !RegionData.Regions.ContainsKey(request.RegionKey))
             return BadRequest("valid regionKey required");
+
+        if (!_scanJob.TryStart())
+            return Conflict(new ScanProgressResponse("scanning", "A scan is already in progress", 0));
 
         cfg.ServerAddress = request.ServerAddress;
         cfg.RegionKey = request.RegionKey;
@@ -79,24 +83,59 @@ public sealed class SatIpController : ControllerBase
         Plugin.Instance!.SaveConfiguration();
 
         var primary = cfg.PrimaryTuner;
-        try
-        {
-            var result = await _scanner.ScanAsync(
-                cfg.ServerAddress, primary.RtspPort, primary.FrontendNumber,
-                cfg.RegionKey, ct).ConfigureAwait(false);
+        var host = cfg.ServerAddress;
+        var port = primary.RtspPort;
+        var frontend = primary.FrontendNumber;
+        var regionKey = cfg.RegionKey;
+        var scanner = _scanner;
+        var logger = _logger;
 
-            cfg.LastScanTime = DateTime.UtcNow.ToString("O");
-            Plugin.Instance!.SaveConfiguration();
-
-            return Ok(new ScanStatusResponse(
-                true, result.Channels.Count,
-                $"Scan complete: {result.Channels.Count} channels in {result.RegionLabel}"));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        _ = Task.Run(async () =>
         {
-            _logger.LogError(ex, "SAT>IP scan failed");
-            return StatusCode((int)HttpStatusCode.InternalServerError, ex.Message);
+            try
+            {
+                var progress = new Progress<string>(msg => _scanJob.Update(msg));
+                var result = await scanner.ScanAsync(host, port, frontend, regionKey, progress, CancellationToken.None)
+                    .ConfigureAwait(false);
+
+                var pluginCfg = Plugin.Instance?.Configuration;
+                if (pluginCfg is not null)
+                {
+                    pluginCfg.LastScanTime = DateTime.UtcNow.ToString("O");
+                    Plugin.Instance!.SaveConfiguration();
+                }
+
+                _scanJob.Complete(result.Channels.Count,
+                    $"Scan complete — {result.Channels.Count} channels in {result.RegionLabel}");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "SAT>IP background scan failed");
+                _scanJob.Fail($"Scan failed: {ex.Message}");
+            }
+        });
+
+        return Accepted(_scanJob.GetProgress());
+    }
+
+    [HttpGet("scan/progress")]
+    public ActionResult<ScanProgressResponse> GetScanProgress()
+    {
+        var prog = _scanJob.GetProgress();
+
+        // When idle, enrich with last stored scan result so callers don't need a second endpoint
+        if (prog.State == "idle")
+        {
+            var scan = _store.Current;
+            if (scan is not null)
+                return Ok(prog with
+                {
+                    Message = $"{scan.Channels.Count} channels ({scan.RegionLabel}) — last scanned {scan.ScannedAt}",
+                    ChannelCount = scan.Channels.Count,
+                });
         }
+
+        return Ok(prog);
     }
 
     [HttpGet("status")]
@@ -177,11 +216,51 @@ public sealed class SatIpController : ControllerBase
         return Ok(new { message = "Channel store cleared. Trigger a new scan to repopulate." });
     }
 
-    // ── Request / response types ────────────────────────────────────────────
+    // ── Scan job tracker ────────────────────────────────────────────────────────
+
+    private sealed class ScanJobTracker
+    {
+        private string _state = "idle";
+        private string _message = "No scan run yet — click Scan to begin";
+        private int _channelCount;
+        private readonly object _lock = new();
+
+        public bool TryStart()
+        {
+            lock (_lock)
+            {
+                if (_state == "scanning") return false;
+                _state = "scanning";
+                _message = "Starting scan…";
+                _channelCount = 0;
+                return true;
+            }
+        }
+
+        public void Update(string message) { lock (_lock) { _message = message; } }
+
+        public void Complete(int count, string message)
+        {
+            lock (_lock) { _state = "done"; _channelCount = count; _message = message; }
+        }
+
+        public void Fail(string message)
+        {
+            lock (_lock) { _state = "failed"; _message = message; }
+        }
+
+        public ScanProgressResponse GetProgress()
+        {
+            lock (_lock) { return new ScanProgressResponse(_state, _message, _channelCount); }
+        }
+    }
+
+    // ── Request / response types ────────────────────────────────────────────────
 
     public sealed record ResolveRegionResponse(string RegionKey, string RegionLabel);
     public sealed record RegionListItem(string Key, string Label);
     public sealed record ScanStatusResponse(bool HasChannels, int ChannelCount, string Message);
+    public sealed record ScanProgressResponse(string State, string Message, int ChannelCount);
     public sealed record TunerRow(int Index, int RtspPort, int FrontendNumber, string DiSEqCPort, string SatelliteLabel);
     public sealed record ChannelRow(int Number, string Name, bool IsHD, bool IsRadio, double FrequencyMHz);
 

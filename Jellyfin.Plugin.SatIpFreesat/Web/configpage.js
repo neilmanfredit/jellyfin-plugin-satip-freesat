@@ -168,13 +168,44 @@ export default function (view) {
         }
     }
 
-    // ── scan status ────────────────────────────────────────────────────────
+    // ── scan progress polling ──────────────────────────────────────────────
+
+    let _scanPoller = null;
+
+    function startPolling() {
+        if (_scanPoller) return;
+        pollScanProgress(); // immediate first tick
+        _scanPoller = setInterval(pollScanProgress, 2000);
+    }
+
+    function stopPolling() {
+        if (_scanPoller) { clearInterval(_scanPoller); _scanPoller = null; }
+    }
+
+    async function pollScanProgress() {
+        const statusEl = view.querySelector('#scanStatus');
+        const spinner = view.querySelector('#scanSpinner');
+        const btn = view.querySelector('#btnScan');
+        try {
+            const data = await apiGet('SatIpFreesat/scan/progress');
+            statusEl.textContent = 'Status: ' + (data.message || '—');
+            const scanning = data.state === 'scanning';
+            spinner.style.display = scanning ? '' : 'none';
+            btn.disabled = scanning;
+            if (!scanning) stopPolling();
+        } catch { /* ignore transient errors; keep polling */ }
+    }
 
     async function refreshScanStatus() {
         const el = view.querySelector('#scanStatus');
         try {
-            const data = await apiGet('SatIpFreesat/status');
+            const data = await apiGet('SatIpFreesat/scan/progress');
             el.textContent = 'Status: ' + (data.message || '—');
+            if (data.state === 'scanning') {
+                view.querySelector('#scanSpinner').style.display = '';
+                view.querySelector('#btnScan').disabled = true;
+                startPolling();
+            }
         } catch {
             el.textContent = 'Status: unable to reach plugin API';
         }
@@ -188,27 +219,23 @@ export default function (view) {
         if (!serverAddress) { Dashboard.alert('Enter a SAT>IP server address first.'); return; }
         if (!regionKey) { Dashboard.alert('Select a region first.'); return; }
 
-        const spinner = view.querySelector('#scanSpinner');
-        const statusEl = view.querySelector('#scanStatus');
-        const btn = view.querySelector('#btnScan');
-        spinner.style.display = '';
-        btn.disabled = true;
-        statusEl.textContent = 'Status: scanning…';
+        view.querySelector('#scanStatus').textContent = 'Status: starting scan…';
 
         try {
-            const data = await apiPost('SatIpFreesat/scan', {
+            await apiPost('SatIpFreesat/scan', {
                 serverAddress,
                 tuners: collectTuners(),
                 regionKey,
             });
-            statusEl.textContent = 'Status: ' + (data.message || 'complete');
-            Dashboard.alert(data.message || 'Scan complete.');
-        } catch {
-            statusEl.textContent = 'Status: scan failed — see Jellyfin logs for details';
-            Dashboard.alert('Scan failed. Check Jellyfin logs for details.');
-        } finally {
-            spinner.style.display = 'none';
-            btn.disabled = false;
+            startPolling();
+        } catch (err) {
+            if (err && err.status === 409) {
+                // Another scan is already running — just start polling its progress
+                startPolling();
+            } else {
+                view.querySelector('#scanStatus').textContent = 'Status: failed to start scan — see Jellyfin logs';
+                Dashboard.alert('Failed to start scan. Check Jellyfin logs for details.');
+            }
         }
     }
 
