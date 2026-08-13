@@ -3,3 +3,7 @@ obj/
 *.user
 .vs/
 *.DotSettings.user
+
+# Claude Code
+.claude/
+MEMORY.md

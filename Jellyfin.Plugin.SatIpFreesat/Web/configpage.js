@@ -307,7 +307,7 @@ export default function (view) {
         if (loaded) { await refreshScanStatus(); return; }
         loaded = true;
 
-        try { cfg = await ApiClient.getPluginConfiguration(PLUGIN_ID); } catch { cfg = {}; }
+        try { cfg = await apiGet('Plugins/' + PLUGIN_ID + '/Configuration'); } catch { cfg = {}; }
 
         const regionSelect = view.querySelector('#regionSelect');
         while (regionSelect.options.length > 1) regionSelect.remove(1);
@@ -334,7 +334,12 @@ export default function (view) {
     view.querySelector('#SatIpFreesatConfigForm').addEventListener('submit', function (e) {
         e.preventDefault();
         const updated = collectForm(cfg);
-        ApiClient.updatePluginConfiguration(PLUGIN_ID, updated)
+        ApiClient.ajax({
+            type: 'POST',
+            url: ApiClient.getUrl('Plugins/' + PLUGIN_ID + '/Configuration'),
+            data: JSON.stringify(updated),
+            contentType: 'application/json',
+        })
             .then(() => {
                 cfg = updated;
                 Dashboard.processPluginConfigurationUpdateResult();

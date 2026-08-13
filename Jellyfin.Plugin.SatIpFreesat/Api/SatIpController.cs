@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.Configuration;
@@ -259,27 +260,53 @@ public sealed class SatIpController : ControllerBase
 
     // ── Request / response types ────────────────────────────────────────────────
 
-    public sealed record ResolveRegionResponse(string RegionKey, string RegionLabel);
-    public sealed record RegionListItem(string Key, string Label);
-    public sealed record ScanStatusResponse(bool HasChannels, int ChannelCount, string Message);
-    public sealed record ScanProgressResponse(string State, string Message, int ChannelCount, int? Percent = null);
-    public sealed record TunerRow(int Index, int RtspPort, int FrontendNumber, string DiSEqCPort, string SatelliteLabel);
-    public sealed record ChannelRow(int Number, string Name, bool IsHD, bool IsRadio, double FrequencyMHz);
+    public sealed record ResolveRegionResponse(
+        [property: JsonPropertyName("regionKey")] string RegionKey,
+        [property: JsonPropertyName("regionLabel")] string RegionLabel);
+
+    public sealed record RegionListItem(
+        [property: JsonPropertyName("key")] string Key,
+        [property: JsonPropertyName("label")] string Label);
+
+    public sealed record ScanStatusResponse(
+        [property: JsonPropertyName("hasChannels")] bool HasChannels,
+        [property: JsonPropertyName("channelCount")] int ChannelCount,
+        [property: JsonPropertyName("message")] string Message);
+
+    public sealed record ScanProgressResponse(
+        [property: JsonPropertyName("state")] string State,
+        [property: JsonPropertyName("message")] string Message,
+        [property: JsonPropertyName("channelCount")] int ChannelCount,
+        [property: JsonPropertyName("percent")] int? Percent = null);
+
+    public sealed record TunerRow(
+        [property: JsonPropertyName("index")] int Index,
+        [property: JsonPropertyName("rtspPort")] int RtspPort,
+        [property: JsonPropertyName("frontendNumber")] int FrontendNumber,
+        [property: JsonPropertyName("diSEqCPort")] string DiSEqCPort,
+        [property: JsonPropertyName("satelliteLabel")] string SatelliteLabel);
+
+    public sealed record ChannelRow(
+        [property: JsonPropertyName("number")] int Number,
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("isHD")] bool IsHD,
+        [property: JsonPropertyName("isRadio")] bool IsRadio,
+        [property: JsonPropertyName("frequencyMHz")] double FrequencyMHz);
 
     public sealed record DetailedStatusResponse(
-        string PluginVersion,
-        string ServerAddress,
-        TunerRow[] Tuners,
-        bool DeviceReachable,
-        long DeviceReachableMs,
-        string DeviceReachableError,
-        bool HasChannels,
-        int ChannelCount,
-        int MuxCount,
-        string RegionLabel,
-        string LastScanTime,
-        ChannelRow[] TopChannels,
-        string GeneratedUtc);
+        [property: JsonPropertyName("pluginVersion")] string PluginVersion,
+        [property: JsonPropertyName("serverAddress")] string ServerAddress,
+        [property: JsonPropertyName("tuners")] TunerRow[] Tuners,
+        [property: JsonPropertyName("deviceReachable")] bool DeviceReachable,
+        [property: JsonPropertyName("deviceReachableMs")] long DeviceReachableMs,
+        [property: JsonPropertyName("deviceReachableError")] string DeviceReachableError,
+        [property: JsonPropertyName("hasChannels")] bool HasChannels,
+        [property: JsonPropertyName("channelCount")] int ChannelCount,
+        [property: JsonPropertyName("muxCount")] int MuxCount,
+        [property: JsonPropertyName("regionLabel")] string RegionLabel,
+        [property: JsonPropertyName("lastScanTime")] string LastScanTime,
+        [property: JsonPropertyName("topChannels")] ChannelRow[] TopChannels,
+        [property: JsonPropertyName("generatedUtc")] string GeneratedUtc);
 
     public sealed class ScanRequest
     {
