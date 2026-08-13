@@ -187,14 +187,14 @@ public sealed class RtspClient : IAsyncDisposable
 
         int seq = ++_cseq;
         var sb = new StringBuilder();
-        sb.AppendLine($"{method} {url} RTSP/1.0");
-        sb.AppendLine($"CSeq: {seq}");
+        sb.Append($"{method} {url} RTSP/1.0\r\n");
+        sb.Append($"CSeq: {seq}\r\n");
         if (_sessionId is not null)
-            sb.AppendLine($"Session: {_sessionId}");
+            sb.Append($"Session: {_sessionId}\r\n");
         if (extraHeaders is not null)
             foreach (var (k, v) in extraHeaders)
-                sb.AppendLine($"{k}: {v}");
-        sb.AppendLine();
+                sb.Append($"{k}: {v}\r\n");
+        sb.Append("\r\n");
 
         var reqBytes = Encoding.ASCII.GetBytes(sb.ToString());
         await _stream.WriteAsync(reqBytes, ct).ConfigureAwait(false);
