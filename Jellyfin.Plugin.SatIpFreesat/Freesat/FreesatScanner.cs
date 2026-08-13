@@ -121,8 +121,14 @@ public sealed class FreesatScanner
             }
         }
 
-        _logger.LogWarning("SAT>IP: no active frontend found — falling back to src={Frontend} TCP", preferredFrontend);
-        return (preferredFrontend, false);
+        _logger.LogWarning(
+            "SAT>IP: no active frontend found via TCP or UDP — defaulting to src={Frontend} UDP. " +
+            "If the scan produces 0 channels, check that inbound UDP from {Device} can reach this host " +
+            "(a firewall or Docker bridge network may be blocking it).",
+            preferredFrontend, host);
+        // TCP was proven not to deliver data (stream closes immediately); UDP at least gets some
+        // RTCP/probe traffic, so use it as the fallback transport for the actual scan.
+        return (preferredFrontend, true);
     }
 
     /// <summary>
@@ -146,18 +152,30 @@ public sealed class FreesatScanner
         catch { return false; }
 
         bool gotData = false;
+        int packetsReceived = 0;
         using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        probeCts.CancelAfter(TimeSpan.FromSeconds(4));
+        probeCts.CancelAfter(TimeSpan.FromSeconds(6));
         try
         {
             while (!probeCts.IsCancellationRequested)
             {
                 var payload = await client.ReadRtpPacketAsync(probeCts.Token).ConfigureAwait(false);
-                if (payload is null) break;
-                if (payload.Length > 0) { gotData = true; break; }
+                if (payload is null) break; // TCP EOF
+                packetsReceived++;
+                // In UDP mode ANY received packet (including RTCP/short) proves the path works.
+                // In TCP mode require actual payload data (non-empty = real RTP).
+                if (client.IsUdpMode || payload.Length > 0) { gotData = true; break; }
             }
         }
         catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger.LogDebug("SAT>IP: probe read exception src={Frontend}: {Msg}", frontend, ex.Message);
+        }
+
+        _logger.LogInformation(
+            "SAT>IP: src={Frontend} ({Mode}) probe: {Pkts} packet(s) received, active={Got}",
+            frontend, useUdp ? "UDP" : "TCP", packetsReceived, gotData);
 
         try { await client.TeardownAsync(ct).ConfigureAwait(false); } catch { }
         return gotData;

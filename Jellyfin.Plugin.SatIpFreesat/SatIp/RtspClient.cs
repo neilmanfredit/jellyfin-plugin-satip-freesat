@@ -159,6 +159,17 @@ public sealed class RtspClient : IAsyncDisposable
     {
         var result = await _udpReceiver!.ReceiveAsync(ct).ConfigureAwait(false);
         var pkt = result.Buffer;
+        _logger.LogDebug(
+            "SAT>IP UDP: {Bytes}B from {Remote} — [{Hex}]",
+            pkt.Length, result.RemoteEndPoint,
+            BitConverter.ToString(pkt, 0, Math.Min(8, pkt.Length)));
+        if (pkt.Length < 12)
+        {
+            // Short packet (RTCP or probe response) — skip but keep reading; do NOT return null
+            // (null signals end-of-stream, which is wrong for UDP).
+            _logger.LogInformation("SAT>IP UDP: short packet ({Bytes}B) — skipping", pkt.Length);
+            return Array.Empty<byte>();
+        }
         return StripRtpHeader(pkt, pkt.Length);
     }
 
