@@ -65,6 +65,12 @@ public static class NitParser
                     0 => 'H', 1 => 'V', 2 => 'L', _ => 'R',
                 };
                 bool isDvbS2 = (d[6] & 0x04) != 0;
+                string modulationType = (d[6] & 0x03) switch
+                {
+                    0x02 => "8psk",
+                    0x03 => "16apsk",
+                    _ => "qpsk",
+                };
                 double srKsym = ParseBcdSymbolRate(d[7..]);
                 int fecInner = d[10] & 0x0F;
 
@@ -77,6 +83,7 @@ public static class NitParser
                     Polarization = pol,
                     SymbolRateKsym = srKsym,
                     IsDvbS2 = isDvbS2,
+                    ModulationType = modulationType,
                     TransportStreamId = tsid,
                     OriginalNetworkId = onid,
                 };

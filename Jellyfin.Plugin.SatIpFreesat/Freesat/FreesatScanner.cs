@@ -128,6 +128,10 @@ public sealed class FreesatScanner
         await ReadStreamAsync(client, reader, SiCollectTimeout, ct).ConfigureAwait(false);
         await client.TeardownAsync(ct).ConfigureAwait(false);
 
+        if (muxes.Count == 0)
+            _logger.LogWarning(
+                "SAT>IP: no muxes found from bootstrap mux — device may not have locked to 11425H DVB-S2 8PSK");
+
         return (muxes.Values.ToList(), bouquets.Values.ToList());
     }
 
@@ -181,6 +185,7 @@ public sealed class FreesatScanner
             Polarization = char.ToLowerInvariant(mux.Polarization),
             SymbolRateKsym = mux.SymbolRateKsym,
             IsDvbS2 = mux.IsDvbS2,
+            ModulationType = mux.ModulationType,
         };
 
         await using var client = new RtspClient(host, port, _logger);

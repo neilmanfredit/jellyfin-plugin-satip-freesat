@@ -9,6 +9,7 @@ public sealed class MuxInfo
     public char Polarization { get; init; }  // 'H' or 'V'
     public double SymbolRateKsym { get; init; }
     public bool IsDvbS2 { get; init; }
+    public string ModulationType { get; init; } = "qpsk"; // "qpsk", "8psk", "16apsk"
     public int TransportStreamId { get; init; }
     public int OriginalNetworkId { get; init; }
 

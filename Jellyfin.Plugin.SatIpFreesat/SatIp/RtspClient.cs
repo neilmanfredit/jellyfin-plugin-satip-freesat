@@ -142,7 +142,7 @@ public sealed class RtspClient : IAsyncDisposable
         sb.Append($"&sr={(int)mux.SymbolRateKsym}");
         sb.Append("&fec=auto");
         if (mux.IsDvbS2)
-            sb.Append("&ro=0.35&mtype=qpsk");
+            sb.Append($"&ro=0.35&mtype={mux.ModulationType}");
         sb.Append($"&pids={pids}");
         return sb.ToString();
     }
@@ -323,14 +323,17 @@ public sealed class SatIpMuxParams
     public char Polarization { get; init; }  // 'h' or 'v' (SAT>IP uses lowercase)
     public double SymbolRateKsym { get; init; }
     public bool IsDvbS2 { get; init; }
+    public string ModulationType { get; init; } = "qpsk"; // "qpsk", "8psk", "16apsk"
     public string MsysParam => IsDvbS2 ? "dvbs2" : "dvbs";
 
+    // 11425 H 27500 is DVB-S2 8PSK on Astra 2E (28.2°E)
     public static SatIpMuxParams Bootstrap(int frontend) => new()
     {
         FrontendNumber = frontend,
         FrequencyMHz = 11425.0,
         Polarization = 'h',
         SymbolRateKsym = 27500,
-        IsDvbS2 = false,
+        IsDvbS2 = true,
+        ModulationType = "8psk",
     };
 }
