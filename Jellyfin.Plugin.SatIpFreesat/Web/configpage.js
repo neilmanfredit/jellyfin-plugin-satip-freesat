@@ -151,9 +151,9 @@ export default function (view) {
             const opt = document.createElement('option');
             opt.value = r.key;
             opt.textContent = r.label;
-            if (r.key === currentKey) opt.selected = true;
             selectEl.appendChild(opt);
         }
+        if (currentKey) selectEl.value = currentKey;
     }
 
     function resolvePostcode(postcode, selectEl) {
