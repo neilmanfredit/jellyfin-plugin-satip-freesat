@@ -48,20 +48,20 @@ public sealed class FreesatScanner
 
         _logger.LogInformation("SAT>IP Freesat scan: host={Host} region={Region}", host, region.Label);
 
-        // Auto-detect which frontend (LNB port) has a satellite signal.
-        // Needed for multi-port LNBs where the cable may be on any src= number.
-        progress?.Report(new("Detecting active LNB port…", null));
-        var activeFrontend = await ProbeWorkingFrontendAsync(host, rtspPort, frontendNumber, ct)
+        // Auto-detect which frontend (LNB port) has signal, and whether the device requires
+        // UDP transport (some devices agree to TCP in SETUP but never send data via it).
+        progress?.Report(new("Detecting active LNB port and transport…", null));
+        var (activeFrontend, useUdp) = await ProbeWorkingFrontendAsync(host, rtspPort, frontendNumber, ct)
             .ConfigureAwait(false);
 
         // Step 1: tune bootstrap mux, collect NIT + BAT (indeterminate — total mux count unknown)
         progress?.Report(new("Reading network and bouquet tables from bootstrap mux…", null));
-        var (muxes, bouquets) = await CollectNitAndBatAsync(host, rtspPort, activeFrontend, ct).ConfigureAwait(false);
+        var (muxes, bouquets) = await CollectNitAndBatAsync(host, rtspPort, activeFrontend, useUdp, ct).ConfigureAwait(false);
         _logger.LogInformation("SAT>IP: discovered {MuxCount} muxes, {BouquetCount} bouquets", muxes.Count, bouquets.Count);
 
         // Step 2: collect SDT from each mux (determinate — percent reported per mux)
         progress?.Report(new($"Discovered {muxes.Count} muxes — scanning services on each…", 0));
-        var allServices = await CollectSdtAsync(host, rtspPort, activeFrontend, muxes, progress, ct).ConfigureAwait(false);
+        var allServices = await CollectSdtAsync(host, rtspPort, activeFrontend, useUdp, muxes, progress, ct).ConfigureAwait(false);
         _logger.LogInformation("SAT>IP: discovered {ServiceCount} services", allServices.Count);
 
         // Step 3: build Freesat channel list (fast — show 99% until tracker marks complete)
@@ -85,44 +85,56 @@ public sealed class FreesatScanner
     // ---- SI collection ----
 
     /// <summary>
-    /// Tries each src= frontend 1-8 with a short read window and returns the first one
-    /// that delivers RTP data. Falls back to <paramref name="preferredFrontend"/> if none responds.
+    /// Probes src=1-8 with TCP interleaved first, then with UDP if TCP delivers nothing.
+    /// Returns the active frontend number and whether UDP transport is required.
     /// </summary>
-    private async Task<int> ProbeWorkingFrontendAsync(
+    private async Task<(int Frontend, bool UseUdp)> ProbeWorkingFrontendAsync(
         string host, int port, int preferredFrontend, CancellationToken ct)
     {
-        // Always try the user-configured value first
         var candidates = Enumerable.Range(1, 8)
-            .OrderBy(n => n == preferredFrontend ? 0 : 1);
+            .OrderBy(n => n == preferredFrontend ? 0 : 1)
+            .ToList();
 
+        // Round 1: TCP interleaved (fast — dead ports close the stream in ~1 s)
+        _logger.LogInformation("SAT>IP: probing frontends with TCP transport…");
         foreach (var frontend in candidates)
         {
             if (ct.IsCancellationRequested) break;
-            _logger.LogInformation("SAT>IP: probing src={Frontend}…", frontend);
-            bool hasData = await TryFrontendAsync(host, port, frontend, ct).ConfigureAwait(false);
-            if (hasData)
+            _logger.LogInformation("SAT>IP: probing src={Frontend} (TCP)…", frontend);
+            if (await TryFrontendAsync(host, port, frontend, useUdp: false, ct).ConfigureAwait(false))
             {
-                if (frontend != preferredFrontend)
-                    _logger.LogInformation(
-                        "SAT>IP: active LNB port is src={Frontend} (configured was src={Configured})",
-                        frontend, preferredFrontend);
-                return frontend;
+                _logger.LogInformation("SAT>IP: active on src={Frontend} via TCP", frontend);
+                return (frontend, false);
             }
         }
 
-        _logger.LogWarning("SAT>IP: no active LNB port found on {Host} — falling back to src={Frontend}", host, preferredFrontend);
-        return preferredFrontend;
+        // Round 2: UDP unicast (device agrees to TCP in SETUP but never sends data via it)
+        _logger.LogInformation("SAT>IP: TCP gave no data — retrying with UDP transport…");
+        foreach (var frontend in candidates)
+        {
+            if (ct.IsCancellationRequested) break;
+            _logger.LogInformation("SAT>IP: probing src={Frontend} (UDP)…", frontend);
+            if (await TryFrontendAsync(host, port, frontend, useUdp: true, ct).ConfigureAwait(false))
+            {
+                _logger.LogInformation("SAT>IP: active on src={Frontend} via UDP", frontend);
+                return (frontend, true);
+            }
+        }
+
+        _logger.LogWarning("SAT>IP: no active frontend found — falling back to src={Frontend} TCP", preferredFrontend);
+        return (preferredFrontend, false);
     }
 
     /// <summary>
     /// Opens a brief RTSP session on <paramref name="frontend"/> and returns true if any
-    /// RTP payload arrives within 4 seconds. A dead/unconnected port closes the stream
-    /// in ~1 s with 0 packets, so this is a fast test.
+    /// RTP payload arrives within 4 seconds.
     /// </summary>
-    private async Task<bool> TryFrontendAsync(string host, int port, int frontend, CancellationToken ct)
+    private async Task<bool> TryFrontendAsync(
+        string host, int port, int frontend, bool useUdp, CancellationToken ct)
     {
         var muxParams = SatIpMuxParams.Bootstrap(frontend);
         await using var client = new RtspClient(host, port, _logger);
+        if (useUdp) client.EnableUdpTransport();
 
         using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         handshakeCts.CancelAfter(RtspHandshakeTimeout);
@@ -141,7 +153,7 @@ public sealed class FreesatScanner
             while (!probeCts.IsCancellationRequested)
             {
                 var payload = await client.ReadRtpPacketAsync(probeCts.Token).ConfigureAwait(false);
-                if (payload is null) break;       // stream closed = no signal on this port
+                if (payload is null) break;
                 if (payload.Length > 0) { gotData = true; break; }
             }
         }
@@ -152,13 +164,14 @@ public sealed class FreesatScanner
     }
 
     private async Task<(List<MuxInfo> Muxes, List<BouquetInfo> Bouquets)> CollectNitAndBatAsync(
-        string host, int port, int frontend, CancellationToken ct)
+        string host, int port, int frontend, bool useUdp, CancellationToken ct)
     {
         var muxes = new Dictionary<string, MuxInfo>();
         var bouquets = new Dictionary<int, BouquetInfo>();
 
         var muxParams = SatIpMuxParams.Bootstrap(frontend);
         await using var client = new RtspClient(host, port, _logger);
+        if (useUdp) client.EnableUdpTransport();
 
         using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         handshakeCts.CancelAfter(RtspHandshakeTimeout);
@@ -209,7 +222,7 @@ public sealed class FreesatScanner
     }
 
     private async Task<List<ServiceInfo>> CollectSdtAsync(
-        string host, int port, int frontend,
+        string host, int port, int frontend, bool useUdp,
         List<MuxInfo> muxes, IProgress<ScanProgress>? progress, CancellationToken ct)
     {
         var allServices = new List<ServiceInfo>();
@@ -230,7 +243,7 @@ public sealed class FreesatScanner
             progress?.Report(new($"Scanning mux {i + 1} of {total} ({mux.FrequencyMHz:F3} MHz {mux.Polarization})…", percent));
             try
             {
-                var services = await CollectSdtFromMuxAsync(host, port, frontend, mux, ct).ConfigureAwait(false);
+                var services = await CollectSdtFromMuxAsync(host, port, frontend, useUdp, mux, ct).ConfigureAwait(false);
                 foreach (var svc in services)
                     svc.Mux = mux;
                 allServices.AddRange(services);
@@ -247,7 +260,7 @@ public sealed class FreesatScanner
     }
 
     private async Task<List<ServiceInfo>> CollectSdtFromMuxAsync(
-        string host, int port, int frontend, MuxInfo mux, CancellationToken ct)
+        string host, int port, int frontend, bool useUdp, MuxInfo mux, CancellationToken ct)
     {
         var services = new Dictionary<int, ServiceInfo>();
 
@@ -262,6 +275,7 @@ public sealed class FreesatScanner
         };
 
         await using var client = new RtspClient(host, port, _logger);
+        if (useUdp) client.EnableUdpTransport();
 
         using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         handshakeCts.CancelAfter(RtspHandshakeTimeout);
