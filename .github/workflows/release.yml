@@ -129,21 +129,22 @@ jobs:
           URL_10="${BASE}/jellyfin-plugin-satip-freesat-${TAG}-jellyfin10.zip"
           URL_12="${BASE}/jellyfin-plugin-satip-freesat-${TAG}-jellyfin12.zip"
           TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          CHANGELOG="$(git log -1 --format='%s' HEAD)"
 
-          # Update the entry matching each targetAbi — version, checksum, sourceUrl, timestamp all change
-          jq --arg ver    "$PLUGIN_VER" \
+          # Prepend two new entries (jellyfin12, jellyfin10) and drop any existing
+          # entries with the same version so re-runs don't produce duplicates.
+          jq --arg ver  "$PLUGIN_VER" \
+             --arg chg  "$CHANGELOG" \
              --arg md5_10 "$MD5_10" \
              --arg md5_12 "$MD5_12" \
              --arg url_10 "$URL_10" \
              --arg url_12 "$URL_12" \
-             --arg ts     "$TS" \
-          '.[0].versions |= map(
-            if .targetAbi == "10.9.0.0" then
-              .version = $ver | .checksum = $md5_10 | .sourceUrl = $url_10 | .timestamp = $ts
-            elif .targetAbi == "12.0.0.0" then
-              .version = $ver | .checksum = $md5_12 | .sourceUrl = $url_12 | .timestamp = $ts
-            else . end
-          )' docs/manifest.json > docs/manifest.json.tmp
+             --arg ts   "$TS" \
+          '.[0].versions = [
+            {"version":$ver,"changelog":$chg,"targetAbi":"12.0.0.0","sourceUrl":$url_12,"checksum":$md5_12,"timestamp":$ts},
+            {"version":$ver,"changelog":$chg,"targetAbi":"10.9.0.0","sourceUrl":$url_10,"checksum":$md5_10,"timestamp":$ts}
+          ] + (.[0].versions | map(select(.version != $ver)))' \
+          docs/manifest.json > docs/manifest.json.tmp
           mv docs/manifest.json.tmp docs/manifest.json
 
       - name: Commit and push manifest
