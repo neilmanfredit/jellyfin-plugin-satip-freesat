@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.3.0",
+        "changelog": "fix: short UDP packets no longer end stream; fallback uses UDP not TCP",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.3/jellyfin-plugin-satip-freesat-v1.9.3-jellyfin12.zip",
+        "checksum": "368ce657782e4fa844449dd4e221b371",
+        "timestamp": "2026-08-13T15:48:07Z"
+      },
+      {
+        "version": "1.9.3.0",
+        "changelog": "fix: short UDP packets no longer end stream; fallback uses UDP not TCP",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.3/jellyfin-plugin-satip-freesat-v1.9.3-jellyfin10.zip",
+        "checksum": "37d539416bd6c01c1d14f2694e14378b",
+        "timestamp": "2026-08-13T15:48:07Z"
+      },
+      {
         "version": "1.9.2.0",
         "changelog": "feat: rewrite RtspClient with UDP unicast transport support",
         "targetAbi": "12.0.0.0",
