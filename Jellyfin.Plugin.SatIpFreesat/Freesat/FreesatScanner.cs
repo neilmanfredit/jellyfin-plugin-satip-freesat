@@ -26,6 +26,9 @@ public sealed class FreesatScanner
     // How long to collect SI data per mux before moving on
     private static readonly TimeSpan SiCollectTimeout = TimeSpan.FromSeconds(30);
 
+    // How long to wait for the RTSP handshake (DESCRIBE + SETUP + PLAY) before giving up
+    private static readonly TimeSpan RtspHandshakeTimeout = TimeSpan.FromSeconds(15);
+
     // Bouquet name patterns that identify BSkyB (always excluded)
     private static readonly string[] SkyPrefixes = ["Sky", "BSkyB"];
 
@@ -83,9 +86,22 @@ public sealed class FreesatScanner
 
         var muxParams = SatIpMuxParams.Bootstrap(frontend);
         await using var client = new RtspClient(host, port, _logger);
-        await client.ConnectAsync(ct).ConfigureAwait(false);
-        // PIDs: 16=NIT, 17=SDT+BAT
-        await client.SetupAndPlayAsync(muxParams, "0,16,17", ct).ConfigureAwait(false);
+
+        using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        handshakeCts.CancelAfter(RtspHandshakeTimeout);
+        try
+        {
+            await client.ConnectAsync(handshakeCts.Token).ConfigureAwait(false);
+            // PIDs: 16=NIT, 17=SDT+BAT
+            await client.SetupAndPlayAsync(muxParams, "0,16,17", handshakeCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogError(
+                "SAT>IP: RTSP handshake timed out after {Sec}s — check the device address and that RTSP port {Port} is reachable",
+                (int)RtspHandshakeTimeout.TotalSeconds, port);
+            return ([], []);
+        }
 
         var reader = new TsReader();
         reader.SubscribePid(NitParser.PidNit);
@@ -168,8 +184,21 @@ public sealed class FreesatScanner
         };
 
         await using var client = new RtspClient(host, port, _logger);
-        await client.ConnectAsync(ct).ConfigureAwait(false);
-        await client.SetupAndPlayAsync(muxParams, "17", ct).ConfigureAwait(false);
+
+        using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        handshakeCts.CancelAfter(RtspHandshakeTimeout);
+        try
+        {
+            await client.ConnectAsync(handshakeCts.Token).ConfigureAwait(false);
+            await client.SetupAndPlayAsync(muxParams, "17", handshakeCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "SAT>IP: RTSP handshake timed out for {Freq}{Pol} — skipping mux",
+                mux.FrequencyMHz, mux.Polarization);
+            return [];
+        }
 
         var reader = new TsReader();
         reader.SubscribePid(SdtParser.PidSdt);

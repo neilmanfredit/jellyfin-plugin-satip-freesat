@@ -210,14 +210,14 @@ public sealed class RtspClient : IAsyncDisposable
         int contentLength = 0;
         int statusCode = 0;
 
-        // Read headers line by line
+        // Read headers line by line; handle both \r\n (standard) and \n-only (some embedded devices)
         var lineBuffer = new List<byte>(256);
         while (true)
         {
             var b = await ReadByteAsync(ct).ConfigureAwait(false);
-            if (b == (byte)'\r')
+            if (b is (byte)'\r' or (byte)'\n')
             {
-                await ReadByteAsync(ct).ConfigureAwait(false); // \n
+                if (b == (byte)'\r') await ReadByteAsync(ct).ConfigureAwait(false); // consume '\n'
                 if (lineBuffer.Count == 0) break; // blank line = end of headers
                 var line = Encoding.ASCII.GetString(lineBuffer.ToArray());
                 lineBuffer.Clear();
