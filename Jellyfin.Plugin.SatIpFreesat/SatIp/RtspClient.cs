@@ -186,7 +186,8 @@ public sealed class RtspClient : IAsyncDisposable
             rtpHeaderLen += extLen;
         }
 
-        if (rtpHeaderLen >= length) return null;
+        // Zero-payload RTP: device sends heartbeat frames while tuning — skip, don't end stream.
+        if (rtpHeaderLen >= length) return Array.Empty<byte>();
         return packet[rtpHeaderLen..];
     }
 
@@ -415,14 +416,16 @@ public sealed class SatIpMuxParams
     public string ModulationType { get; init; } = "qpsk"; // "qpsk", "8psk", "16apsk"
     public string MsysParam => IsDvbS2 ? "dvbs2" : "dvbs";
 
-    // 11425 H 27500 is DVB-S2 8PSK on Astra 2E (28.2°E)
+    // 11425H 27500 on Astra 2E (28.2°E) is DVB-S QPSK.
+    // The NIT carried on this transponder lists all other muxes with their correct
+    // DVB-S/S2 modulation, so per-mux SDT scans use the right parameters.
     public static SatIpMuxParams Bootstrap(int frontend) => new()
     {
         FrontendNumber = frontend,
         FrequencyMHz = 11425.0,
         Polarization = 'h',
         SymbolRateKsym = 27500,
-        IsDvbS2 = true,
-        ModulationType = "8psk",
+        IsDvbS2 = false,
+        ModulationType = "qpsk",
     };
 }

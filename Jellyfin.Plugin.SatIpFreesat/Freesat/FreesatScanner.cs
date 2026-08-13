@@ -234,7 +234,7 @@ public sealed class FreesatScanner
 
         if (muxes.Count == 0)
             _logger.LogWarning(
-                "SAT>IP: no muxes found from bootstrap mux — device may not have locked to 11425H DVB-S2 8PSK");
+                "SAT>IP: no muxes found from bootstrap mux — device may not have locked to 11425H DVB-S 27500");
 
         return (muxes.Values.ToList(), bouquets.Values.ToList());
     }
