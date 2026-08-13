@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.2.0",
+        "changelog": "feat: rewrite RtspClient with UDP unicast transport support",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.2/jellyfin-plugin-satip-freesat-v1.9.2-jellyfin12.zip",
+        "checksum": "6f08b5ff261c2ec08159174acf4fdd81",
+        "timestamp": "2026-08-13T15:34:34Z"
+      },
+      {
+        "version": "1.9.2.0",
+        "changelog": "feat: rewrite RtspClient with UDP unicast transport support",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.2/jellyfin-plugin-satip-freesat-v1.9.2-jellyfin10.zip",
+        "checksum": "079c896790972d93af0cf1ee4e3d519a",
+        "timestamp": "2026-08-13T15:34:34Z"
+      },
+      {
         "version": "1.0.11.0",
         "changelog": "feat: auto-detect active LNB port (src=) before scanning",
         "targetAbi": "12.0.0.0",
