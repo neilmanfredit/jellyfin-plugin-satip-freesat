@@ -48,14 +48,20 @@ public sealed class FreesatScanner
 
         _logger.LogInformation("SAT>IP Freesat scan: host={Host} region={Region}", host, region.Label);
 
+        // Auto-detect which frontend (LNB port) has a satellite signal.
+        // Needed for multi-port LNBs where the cable may be on any src= number.
+        progress?.Report(new("Detecting active LNB port…", null));
+        var activeFrontend = await ProbeWorkingFrontendAsync(host, rtspPort, frontendNumber, ct)
+            .ConfigureAwait(false);
+
         // Step 1: tune bootstrap mux, collect NIT + BAT (indeterminate — total mux count unknown)
         progress?.Report(new("Reading network and bouquet tables from bootstrap mux…", null));
-        var (muxes, bouquets) = await CollectNitAndBatAsync(host, rtspPort, frontendNumber, ct).ConfigureAwait(false);
+        var (muxes, bouquets) = await CollectNitAndBatAsync(host, rtspPort, activeFrontend, ct).ConfigureAwait(false);
         _logger.LogInformation("SAT>IP: discovered {MuxCount} muxes, {BouquetCount} bouquets", muxes.Count, bouquets.Count);
 
         // Step 2: collect SDT from each mux (determinate — percent reported per mux)
         progress?.Report(new($"Discovered {muxes.Count} muxes — scanning services on each…", 0));
-        var allServices = await CollectSdtAsync(host, rtspPort, frontendNumber, muxes, progress, ct).ConfigureAwait(false);
+        var allServices = await CollectSdtAsync(host, rtspPort, activeFrontend, muxes, progress, ct).ConfigureAwait(false);
         _logger.LogInformation("SAT>IP: discovered {ServiceCount} services", allServices.Count);
 
         // Step 3: build Freesat channel list (fast — show 99% until tracker marks complete)
@@ -77,6 +83,73 @@ public sealed class FreesatScanner
     }
 
     // ---- SI collection ----
+
+    /// <summary>
+    /// Tries each src= frontend 1-8 with a short read window and returns the first one
+    /// that delivers RTP data. Falls back to <paramref name="preferredFrontend"/> if none responds.
+    /// </summary>
+    private async Task<int> ProbeWorkingFrontendAsync(
+        string host, int port, int preferredFrontend, CancellationToken ct)
+    {
+        // Always try the user-configured value first
+        var candidates = Enumerable.Range(1, 8)
+            .OrderBy(n => n == preferredFrontend ? 0 : 1);
+
+        foreach (var frontend in candidates)
+        {
+            if (ct.IsCancellationRequested) break;
+            _logger.LogInformation("SAT>IP: probing src={Frontend}…", frontend);
+            bool hasData = await TryFrontendAsync(host, port, frontend, ct).ConfigureAwait(false);
+            if (hasData)
+            {
+                if (frontend != preferredFrontend)
+                    _logger.LogInformation(
+                        "SAT>IP: active LNB port is src={Frontend} (configured was src={Configured})",
+                        frontend, preferredFrontend);
+                return frontend;
+            }
+        }
+
+        _logger.LogWarning("SAT>IP: no active LNB port found on {Host} — falling back to src={Frontend}", host, preferredFrontend);
+        return preferredFrontend;
+    }
+
+    /// <summary>
+    /// Opens a brief RTSP session on <paramref name="frontend"/> and returns true if any
+    /// RTP payload arrives within 4 seconds. A dead/unconnected port closes the stream
+    /// in ~1 s with 0 packets, so this is a fast test.
+    /// </summary>
+    private async Task<bool> TryFrontendAsync(string host, int port, int frontend, CancellationToken ct)
+    {
+        var muxParams = SatIpMuxParams.Bootstrap(frontend);
+        await using var client = new RtspClient(host, port, _logger);
+
+        using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        handshakeCts.CancelAfter(RtspHandshakeTimeout);
+        try
+        {
+            await client.ConnectAsync(handshakeCts.Token).ConfigureAwait(false);
+            await client.SetupAndPlayAsync(muxParams, "16,17", handshakeCts.Token).ConfigureAwait(false);
+        }
+        catch { return false; }
+
+        bool gotData = false;
+        using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        probeCts.CancelAfter(TimeSpan.FromSeconds(4));
+        try
+        {
+            while (!probeCts.IsCancellationRequested)
+            {
+                var payload = await client.ReadRtpPacketAsync(probeCts.Token).ConfigureAwait(false);
+                if (payload is null) break;       // stream closed = no signal on this port
+                if (payload.Length > 0) { gotData = true; break; }
+            }
+        }
+        catch (OperationCanceledException) { }
+
+        try { await client.TeardownAsync(ct).ConfigureAwait(false); } catch { }
+        return gotData;
+    }
 
     private async Task<(List<MuxInfo> Muxes, List<BouquetInfo> Bouquets)> CollectNitAndBatAsync(
         string host, int port, int frontend, CancellationToken ct)
