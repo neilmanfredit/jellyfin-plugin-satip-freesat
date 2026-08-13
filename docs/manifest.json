@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.0.9.0",
+        "changelog": "fix: send RTSP GET_PARAMETER keep-alives to prevent session timeout",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.0.9/jellyfin-plugin-satip-freesat-v1.0.9-jellyfin12.zip",
+        "checksum": "a4a403fe480a50559996e65e16cdba55",
+        "timestamp": "2026-08-13T14:34:53Z"
+      },
+      {
+        "version": "1.0.9.0",
+        "changelog": "fix: send RTSP GET_PARAMETER keep-alives to prevent session timeout",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.0.9/jellyfin-plugin-satip-freesat-v1.0.9-jellyfin10.zip",
+        "checksum": "28e4e761a4241ab795bef65181bfc139",
+        "timestamp": "2026-08-13T14:34:53Z"
+      },
+      {
         "version": "1.0.8.0",
         "changelog": "diag: log RTSP status, transport, SDP; fix control URL; drop PID 0",
         "targetAbi": "12.0.0.0",
