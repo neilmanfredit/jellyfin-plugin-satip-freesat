@@ -46,15 +46,15 @@ public sealed class RtspClient : IAsyncDisposable
     public async Task<string> SetupAndPlayAsync(SatIpMuxParams mux, string pids, CancellationToken ct)
     {
         var describeUrl = BuildDescribeUrl(mux, pids);
-        _logger.LogDebug("SAT>IP RTSP DESCRIBE: {Url}", describeUrl);
+        _logger.LogInformation("SAT>IP RTSP DESCRIBE: {Url}", describeUrl);
 
         var sdp = await DescribeAsync(describeUrl, ct).ConfigureAwait(false);
-        _controlUrl = ParseControlFromSdp(sdp, _host, _port);
+        _controlUrl = ParseControlFromSdp(sdp, describeUrl, _host, _port);
 
-        _logger.LogDebug("SAT>IP RTSP SETUP: {Control}", _controlUrl);
+        _logger.LogInformation("SAT>IP RTSP SETUP: control={Control}", _controlUrl);
         await SetupAsync(ct).ConfigureAwait(false);
 
-        _logger.LogDebug("SAT>IP RTSP PLAY: session={Session}", _sessionId);
+        _logger.LogInformation("SAT>IP RTSP PLAY: session={Session}", _sessionId);
         await PlayAsync(ct).ConfigureAwait(false);
 
         return _sessionId ?? string.Empty;
@@ -153,6 +153,8 @@ public sealed class RtspClient : IAsyncDisposable
         {
             ["Accept"] = "application/sdp",
         }, ct).ConfigureAwait(false);
+        _logger.LogInformation("SAT>IP RTSP DESCRIBE: status={Code} body-bytes={Len}", response.StatusCode, response.Body.Length);
+        _logger.LogDebug("SAT>IP RTSP SDP:\n{Sdp}", response.Body);
         return response.Body;
     }
 
@@ -167,6 +169,10 @@ public sealed class RtspClient : IAsyncDisposable
         // Extract session ID
         if (response.Headers.TryGetValue("session", out var sess))
             _sessionId = sess.Split(';')[0].Trim();
+
+        response.Headers.TryGetValue("transport", out var transport);
+        _logger.LogInformation("SAT>IP RTSP SETUP: status={Code} session={Session} transport={Transport}",
+            response.StatusCode, _sessionId ?? "(none)", transport ?? "(none)");
     }
 
     private async Task PlayAsync(CancellationToken ct)
@@ -260,9 +266,6 @@ public sealed class RtspClient : IAsyncDisposable
             body = Encoding.UTF8.GetString(buf, 0, got);
         }
 
-        if (statusCode is not 200 and not 0)
-            _logger.LogWarning("SAT>IP RTSP: status {Code} in response", statusCode);
-
         return new RtspResponse(statusCode, headers, body);
     }
 
@@ -287,23 +290,22 @@ public sealed class RtspClient : IAsyncDisposable
         return buf[0];
     }
 
-    private static string ParseControlFromSdp(string sdp, string host, int port)
+    private static string ParseControlFromSdp(string sdp, string describeUrl, string host, int port)
     {
-        // Look for: a=control:stream=N
+        // Look for: a=control:<url-or-*>
         foreach (var line in sdp.Split('\n'))
         {
             var t = line.Trim();
-            if (t.StartsWith("a=control:", StringComparison.OrdinalIgnoreCase))
-            {
-                var val = t["a=control:".Length..].Trim();
-                if (val.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase))
-                    return val;
-                // Relative — prepend server base
-                return $"rtsp://{host}:{port}/{val.TrimStart('/')}";
-            }
+            if (!t.StartsWith("a=control:", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var val = t["a=control:".Length..].Trim();
+            if (val == "*") return describeUrl;  // inherit the DESCRIBE URL
+            if (val.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase)) return val;
+            // Relative — prepend server base
+            return $"rtsp://{host}:{port}/{val.TrimStart('/')}";
         }
-        // Fallback: use /stream=1
-        return $"rtsp://{host}:{port}/stream=1";
+        // Fallback: use the DESCRIBE URL (device will recognise it as the active stream)
+        return describeUrl;
     }
 
     public async ValueTask DisposeAsync()

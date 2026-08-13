@@ -92,8 +92,8 @@ public sealed class FreesatScanner
         try
         {
             await client.ConnectAsync(handshakeCts.Token).ConfigureAwait(false);
-            // PIDs: 16=NIT, 17=SDT+BAT
-            await client.SetupAndPlayAsync(muxParams, "0,16,17", handshakeCts.Token).ConfigureAwait(false);
+            // PIDs: 16=NIT, 17=SDT+BAT (PID 0/PAT omitted; some devices reject it in the filter)
+            await client.SetupAndPlayAsync(muxParams, "16,17", handshakeCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
