@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.0.7.0",
+        "changelog": "fix: use correct DVB-S2 8PSK modulation for bootstrap and NIT-discovered muxes",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.0.7/jellyfin-plugin-satip-freesat-v1.0.7-jellyfin12.zip",
+        "checksum": "62560ce4ee25ac1167efb618ae42f7e5",
+        "timestamp": "2026-08-13T14:18:10Z"
+      },
+      {
+        "version": "1.0.7.0",
+        "changelog": "fix: use correct DVB-S2 8PSK modulation for bootstrap and NIT-discovered muxes",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.0.7/jellyfin-plugin-satip-freesat-v1.0.7-jellyfin10.zip",
+        "checksum": "84e05b962f4a05b41e1f24fc3ea44eb9",
+        "timestamp": "2026-08-13T14:18:10Z"
+      },
+      {
         "version": "1.0.6.0",
         "changelog": "fix: use CRLF line endings in RTSP requests",
         "targetAbi": "12.0.0.0",
