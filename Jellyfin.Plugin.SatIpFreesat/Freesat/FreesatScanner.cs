@@ -125,7 +125,7 @@ public sealed class FreesatScanner
             }
         };
 
-        await ReadStreamAsync(client, reader, SiCollectTimeout, ct).ConfigureAwait(false);
+        await ReadStreamAsync(client, reader, SiCollectTimeout, ct, _logger).ConfigureAwait(false);
         await client.TeardownAsync(ct).ConfigureAwait(false);
 
         if (muxes.Count == 0)
@@ -218,7 +218,7 @@ public sealed class FreesatScanner
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        try { await ReadStreamAsync(client, reader, TimeSpan.FromSeconds(15), timeout.Token).ConfigureAwait(false); }
+        try { await ReadStreamAsync(client, reader, TimeSpan.FromSeconds(15), timeout.Token, _logger).ConfigureAwait(false); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { /* per-mux timeout */ }
 
         await client.TeardownAsync(ct).ConfigureAwait(false);
@@ -226,7 +226,8 @@ public sealed class FreesatScanner
     }
 
     private static async Task ReadStreamAsync(
-        RtspClient client, TsReader reader, TimeSpan timeout, CancellationToken ct)
+        RtspClient client, TsReader reader, TimeSpan timeout, CancellationToken ct,
+        ILogger? logger = null)
     {
         // Send periodic GET_PARAMETER keep-alives so the device doesn't time out the session.
         // Interval = half the negotiated timeout (floor 1 s). The keep-alive response arrives
@@ -250,6 +251,8 @@ public sealed class FreesatScanner
             catch (OperationCanceledException) { }
         }, cts.Token);
 
+        int packets = 0;
+        long bytes = 0;
         try
         {
             while (!cts.IsCancellationRequested)
@@ -257,6 +260,8 @@ public sealed class FreesatScanner
                 var payload = await client.ReadRtpPacketAsync(cts.Token).ConfigureAwait(false);
                 if (payload is null) break;          // stream closed
                 if (payload.Length == 0) continue;   // RTCP or skipped RTSP frame
+                packets++;
+                bytes += payload.Length;
                 reader.Feed(payload);
             }
         }
@@ -268,6 +273,7 @@ public sealed class FreesatScanner
         {
             await cts.CancelAsync().ConfigureAwait(false);
             try { await keepAliveTask.ConfigureAwait(false); } catch { }
+            logger?.LogInformation("SAT>IP: RTP stream ended — {Packets} packets, {Bytes} bytes received", packets, bytes);
         }
     }
 

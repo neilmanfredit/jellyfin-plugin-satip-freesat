@@ -195,10 +195,11 @@ public sealed class RtspClient : IAsyncDisposable
     private async Task PlayAsync(CancellationToken ct)
     {
         var url = _controlUrl ?? throw new InvalidOperationException("No control URL");
-        await SendRequestAsync("PLAY", url, new Dictionary<string, string>
+        var response = await SendRequestAsync("PLAY", url, new Dictionary<string, string>
         {
             ["Range"] = "npt=0.000-",
         }, ct).ConfigureAwait(false);
+        _logger.LogInformation("SAT>IP RTSP PLAY: status={Code}", response.StatusCode);
     }
 
     private async Task<RtspResponse> SendRequestAsync(
