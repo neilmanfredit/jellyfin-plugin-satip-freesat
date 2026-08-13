@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.4.0",
+        "changelog": "fix: bootstrap transponder is DVB-S QPSK, not DVB-S2 8PSK",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.4/jellyfin-plugin-satip-freesat-v1.9.4-jellyfin12.zip",
+        "checksum": "225f414b1672e31ae76f32493356e23a",
+        "timestamp": "2026-08-13T16:03:23Z"
+      },
+      {
+        "version": "1.9.4.0",
+        "changelog": "fix: bootstrap transponder is DVB-S QPSK, not DVB-S2 8PSK",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.4/jellyfin-plugin-satip-freesat-v1.9.4-jellyfin10.zip",
+        "checksum": "81e3a4ec4f3f6422ce89520c8ba8ab62",
+        "timestamp": "2026-08-13T16:03:23Z"
+      },
+      {
         "version": "1.9.3.0",
         "changelog": "fix: short UDP packets no longer end stream; fallback uses UDP not TCP",
         "targetAbi": "12.0.0.0",
