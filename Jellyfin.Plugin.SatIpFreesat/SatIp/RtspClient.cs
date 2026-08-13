@@ -93,9 +93,9 @@ public sealed class RtspClient : IAsyncDisposable
 
         if (header[0] != 0x24) // '$'
         {
-            // Got an RTSP response or stray bytes - skip line
+            // Got an RTSP response or stray bytes - skip to end of headers
             await SkipRtspResponseAsync(ct).ConfigureAwait(false);
-            return null;
+            return Array.Empty<byte>(); // signal "skip" not "stream ended"
         }
 
         int channel = header[1];
@@ -110,7 +110,8 @@ public sealed class RtspClient : IAsyncDisposable
         }
 
         // Channel 1 = RTCP (keep-alives, ignore payload); channel 0 = RTP data
-        if (channel != 0) return null;
+        // Return empty (not null) so callers can continue reading rather than terminating the loop.
+        if (channel != 0) return Array.Empty<byte>();
 
         // Strip 12-byte RTP fixed header
         if (length < 12) return null;

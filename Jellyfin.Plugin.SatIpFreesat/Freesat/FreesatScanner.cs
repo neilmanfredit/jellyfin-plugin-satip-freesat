@@ -164,7 +164,9 @@ public sealed class FreesatScanner
         reader.SubscribePid(SdtParser.PidSdt);
         reader.SectionReady += (_, section) =>
         {
-            if (section[0] is not (SdtParser.TableIdSdtActual or SdtParser.TableIdSdtOther)) return;
+            // Only accept SDT-Actual: SDT-Other describes services on foreign TSes, but the
+            // mux we assign here is the one we're tuned to, giving the wrong TSID for lookups.
+            if (section[0] != SdtParser.TableIdSdtActual) return;
             foreach (var svc in SdtParser.Parse(section))
                 services.TryAdd(svc.ServiceId, svc);
         };
@@ -188,7 +190,8 @@ public sealed class FreesatScanner
             while (!cts.IsCancellationRequested)
             {
                 var payload = await client.ReadRtpPacketAsync(cts.Token).ConfigureAwait(false);
-                if (payload is null) break;
+                if (payload is null) break;          // stream closed
+                if (payload.Length == 0) continue;   // RTCP or skipped RTSP frame
                 reader.Feed(payload);
             }
         }
