@@ -93,8 +93,8 @@ public static class NitParser
         return null;
     }
 
-    // Frequency: 32-bit BCD, each nibble 0-9.
-    // Value represents GHz with implied 6 decimal places: e.g. 0x11425000 = 11.425000 GHz = 11425 MHz.
+    // Frequency: 32-bit BCD, each nibble 0-9, in units of 10 kHz (EN 300 468).
+    // e.g. 11425 MHz = 1142500 (units of 10 kHz) → BCD digits "01142500".
     private static double ParseBcdFrequency(ReadOnlySpan<byte> d)
     {
         long digits = 0;
@@ -103,8 +103,8 @@ public static class NitParser
             digits = digits * 10 + ((d[b] >> 4) & 0xF);
             digits = digits * 10 + (d[b] & 0xF);
         }
-        // digits = 11425000 → 11425000 / 1000 = 11425 MHz
-        return digits / 1000.0;
+        // digits is in units of 10 kHz: digits=1142500 → 1142500*10 kHz = 11425000 kHz = 11425 MHz.
+        return digits / 100.0;
     }
 
     // Orbital position: 16-bit BCD, units of 0.1 degree
