@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.6.0",
+        "changelog": "fix: remove IsHdTier bouquet filter that caused 0 channels; add scan progress to status page",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.6/jellyfin-plugin-satip-freesat-v1.9.6-jellyfin12.zip",
+        "checksum": "9ad66166d1d36d6a78a0d988ee733319",
+        "timestamp": "2026-09-28T13:00:46Z"
+      },
+      {
+        "version": "1.9.6.0",
+        "changelog": "fix: remove IsHdTier bouquet filter that caused 0 channels; add scan progress to status page",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.6/jellyfin-plugin-satip-freesat-v1.9.6-jellyfin10.zip",
+        "checksum": "ff3bdd6c18c348d51ff4d848019bf283",
+        "timestamp": "2026-09-28T13:00:46Z"
+      },
+      {
         "version": "1.9.5.0",
         "changelog": "ci: rebase before manifest push to handle concurrent runs",
         "targetAbi": "12.0.0.0",
