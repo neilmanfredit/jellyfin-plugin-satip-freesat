@@ -76,6 +76,7 @@ public sealed class FreesatScanner
             RegionLabel = region.Label,
             ScannedAt = DateTime.UtcNow.ToString("O"),
             MuxCount = muxes.Count,
+            UseUdpTransport = useUdp,
         };
 
         await _store.SaveAsync(result, ct).ConfigureAwait(false);

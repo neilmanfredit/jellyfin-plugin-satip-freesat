@@ -87,11 +87,18 @@ public sealed class FreesatEpgProvider : IListingsProvider
             Polarization = char.ToLowerInvariant(channel.Mux.Polarization),
             SymbolRateKsym = channel.Mux.SymbolRateKsym,
             IsDvbS2 = channel.Mux.IsDvbS2,
+            ModulationType = channel.Mux.ModulationType,
         };
+
+        // Use the same transport (TCP vs UDP) the scan detected for this device.
+        // If the device requires UDP (TCP delivers no data), TCP collection silently
+        // times out after 45 s and returns nothing.
+        bool useUdp = _store.Current?.UseUdpTransport ?? false;
 
         try
         {
             await using var client = new RtspClient(cfg.ServerAddress, primary.RtspPort, _logger);
+            if (useUdp) client.EnableUdpTransport();
             await client.ConnectAsync(ct).ConfigureAwait(false);
             await client.SetupAndPlayAsync(muxParams, "18", ct).ConfigureAwait(false);
 

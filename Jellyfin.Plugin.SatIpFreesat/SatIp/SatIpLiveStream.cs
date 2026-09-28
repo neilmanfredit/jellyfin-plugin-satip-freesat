@@ -80,8 +80,14 @@ public sealed class SatIpLiveStream : ILiveStream
         var pol = mux.Polarization == 'H' ? "h" : "v";
         var msys = mux.IsDvbS2 ? "dvbs2" : "dvbs";
         var sr = (int)mux.SymbolRateKsym;
-        return $"rtsp://{host}:{port}/stream={frontend}?src={frontend}" +
-               $"&freq={mux.FrequencyMHz:F3}&pol={pol}&msys={msys}&sr={sr}" +
-               "&fec=auto&pids=all";
+        // SAT>IP DESCRIBE URL: path must be "/" (or "/?..."), not "/stream=N".
+        // "/stream=N" is a server-assigned session ID returned after SETUP — the client
+        // must not put it in the initial DESCRIBE or the SAT>IP server will reject it.
+        var url = $"rtsp://{host}:{port}/?src={frontend}" +
+                  $"&freq={mux.FrequencyMHz:F3}&pol={pol}&msys={msys}&sr={sr}&fec=auto";
+        if (mux.IsDvbS2)
+            url += $"&ro=0.35&mtype={mux.ModulationType}";
+        url += "&pids=all";
+        return url;
     }
 }

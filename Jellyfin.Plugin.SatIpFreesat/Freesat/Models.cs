@@ -81,4 +81,11 @@ public sealed class ScanResult
     public string RegionLabel { get; init; } = string.Empty;
     public string ScannedAt { get; init; } = string.Empty;
     public int MuxCount { get; init; }
+
+    /// <summary>
+    /// True if the scan detected that this device requires UDP unicast transport
+    /// (TCP interleaved delivered no data). Used by the EPG collector to match the
+    /// same transport, otherwise EIT collection silently times out on such devices.
+    /// </summary>
+    public bool UseUdpTransport { get; init; }
 }
