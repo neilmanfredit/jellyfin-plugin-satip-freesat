@@ -126,6 +126,6 @@ public sealed class SatIpTunerHost : ITunerHost
         var tuner = tuners.FirstOrDefault(t => !usedFrontends.Contains(t.FrontendNumber))
                     ?? tuners[0];
 
-        return new SatIpLiveStream(channel, cfg.ServerAddress, tuner, cfg);
+        return new SatIpLiveStream(channel, cfg.ServerAddress, tuner, cfg, _logger);
     }
 }

@@ -9,12 +9,16 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.MediaInfo;
+using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SatIpFreesat.SatIp;
 
 /// <summary>
 /// Jellyfin ILiveStream implementation for a SAT>IP channel.
-/// The RTSP URL is passed to Jellyfin/ffmpeg directly; no in-process proxying.
+/// We pull RTSP/RTP data from the tuner ourselves via <see cref="SatIpStreamProxy"/> and write
+/// it to a local growing file that ffmpeg reads as a plain file source — see the proxy class for
+/// why (letting ffmpeg open the rtsp:// URL directly means it has to wait, unpredictably, for
+/// the next H.264 keyframe boundary before it can decode anything).
 /// </summary>
 public sealed class SatIpLiveStream : ILiveStream
 {
@@ -29,33 +33,42 @@ public sealed class SatIpLiveStream : ILiveStream
     /// <summary>Which SAT>IP frontend (src=) this stream is using.</summary>
     public int FrontendNumber { get; }
 
-    public SatIpLiveStream(FreesatChannel channel, string serverAddress, TunerEntry tuner, Configuration.PluginConfiguration cfg)
+    private readonly SatIpStreamProxy _proxy;
+
+    public SatIpLiveStream(
+        FreesatChannel channel, string serverAddress, TunerEntry tuner,
+        Configuration.PluginConfiguration cfg, ILogger logger)
     {
         FrontendNumber = tuner.FrontendNumber;
         OriginalStreamId = channel.ChannelId;
         TunerHostId = "satip-freesat";
         EnableStreamSharing = cfg.EnableStreamSharing;
 
-        var rtspUrl = BuildRtspUrl(channel, serverAddress, tuner.RtspPort, tuner.FrontendNumber);
+        var muxParams = new SatIpMuxParams
+        {
+            FrontendNumber = tuner.FrontendNumber,
+            FrequencyMHz = channel.Mux.FrequencyMHz,
+            Polarization = char.ToLowerInvariant(channel.Mux.Polarization),
+            SymbolRateKsym = channel.Mux.SymbolRateKsym,
+            IsDvbS2 = channel.Mux.IsDvbS2,
+            ModulationType = channel.Mux.ModulationType,
+        };
+
+        var pids = BuildPids(channel);
+        _proxy = new SatIpStreamProxy(logger, serverAddress, tuner.RtspPort, muxParams, pids, channel.VideoPid);
 
         MediaSource = new MediaSourceInfo
         {
             Id = UniqueId,
-            Path = rtspUrl,
-            Protocol = MediaProtocol.Rtsp,
-            IsRemote = true,
+            Path = _proxy.FilePath,
+            Protocol = MediaProtocol.File,
+            Container = "mpegts",
+            IsRemote = false,
             IsInfiniteStream = true,
             ReadAtNativeFramerate = false,
             RequiresOpening = true,
-            RequiresClosing = false,
+            RequiresClosing = true,
             SupportsProbing = true,
-            // Leave Container unset. Jellyfin's EncodingHelper maps Container="ts" to an
-            // explicit "-f mpegts" flag injected before "-i rtsp://...". That forces ffmpeg
-            // to open the URL via the generic protocol layer instead of auto-detecting the
-            // rtsp demuxer — and "rtsp" isn't a registered ffmpeg URL protocol (only a
-            // demuxer), so the input fails with "Protocol not found". ffprobe already
-            // reports this source's format_name as "rtsp", not "ts"/"mpegts", so leaving
-            // Container unset lets ffmpeg auto-detect correctly, matching what actually works.
             MediaStreams =
             [
                 new MediaStream
@@ -91,44 +104,25 @@ public sealed class SatIpLiveStream : ILiveStream
 
     public Stream GetStream() => Stream.Null;
 
-    public Task Open(CancellationToken ct) => Task.CompletedTask;
-    public Task Close() => Task.CompletedTask;
+    public Task Open(CancellationToken ct) => _proxy.OpenAsync(ct);
+    public Task Close() => _proxy.CloseAsync();
     public void Dispose() { }
 
-    private static string BuildRtspUrl(FreesatChannel channel, string host, int port, int frontend)
+    private static string BuildPids(FreesatChannel channel)
     {
-        var mux = channel.Mux;
-        var pol = mux.Polarization == 'H' ? "h" : "v";
-        var msys = mux.IsDvbS2 ? "dvbs2" : "dvbs";
-        var sr = (int)mux.SymbolRateKsym;
-        // SAT>IP DESCRIBE URL: path must be "/" (or "/?..."), not "/stream=N".
-        // "/stream=N" is a server-assigned session ID returned after SETUP — the client
-        // must not put it in the initial DESCRIBE or the SAT>IP server will reject it.
-        var url = $"rtsp://{host}:{port}/?src={frontend}" +
-                  $"&freq={mux.FrequencyMHz:F3}&pol={pol}&msys={msys}&sr={sr}&fec=auto";
-        if (mux.IsDvbS2)
-            url += $"&ro=0.35&mtype={mux.ModulationType}";
-
+        // Request only PAT + this channel's PMT + its video (+ audio, if known) elementary
+        // streams. Requesting "pids=all" makes minisatip deliver the *entire* transponder —
+        // every channel sharing the mux, potentially 5+ programs and dozens of streams — which
+        // blows the probe budget and breaks the hardcoded MediaStream.Index=0/1 mapping above.
         if (channel.PmtPid is int pmtPid && channel.VideoPid is int videoPid)
         {
-            // Request only PAT + this channel's PMT + its video (+ audio, if known) elementary
-            // streams. "pids=all" used to be sent here, which makes minisatip deliver the
-            // *entire* transponder — every channel sharing the mux, potentially 5+ programs
-            // and dozens of streams. That blows ffmpeg's probe budget (repeated SIGKILL/
-            // cancel retry loops) and breaks the hardcoded MediaStream.Index=0/1 mapping below,
-            // since index 0/1 of the full multiplex doesn't correspond to this channel's
-            // actual video/audio streams once other programs are present.
             var pids = $"0,{pmtPid},{videoPid}";
             if (channel.AudioPid is int audioPid) pids += $",{audioPid}";
-            url += $"&pids={pids}";
-        }
-        else
-        {
-            // Scan couldn't resolve this channel's PMT/PIDs (e.g. PAT/PMT collection timed
-            // out on a busy mux) — fall back to the old behaviour rather than fail to play.
-            url += "&pids=all";
+            return pids;
         }
 
-        return url;
+        // Scan couldn't resolve this channel's PMT/PIDs (e.g. PAT/PMT collection timed out on a
+        // busy mux) — fall back to the old behaviour rather than fail to play.
+        return "all";
     }
 }
