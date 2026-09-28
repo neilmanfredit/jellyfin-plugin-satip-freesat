@@ -71,7 +71,7 @@ public sealed class SatIpTunerHost : ITunerHost
         return Task.FromResult(new List<MediaSourceInfo> { stream.MediaSource });
     }
 
-    public Task<ILiveStream> GetChannelStream(
+    public async Task<ILiveStream> GetChannelStream(
         string channelId, string streamId,
         IList<ILiveStream> currentLiveStreams, CancellationToken ct)
     {
@@ -81,7 +81,13 @@ public sealed class SatIpTunerHost : ITunerHost
 
         _logger.LogInformation("SAT>IP: opening stream for {Id} on frontend {Frontend}",
             channelId, stream.FrontendNumber);
-        return Task.FromResult<ILiveStream>(stream);
+
+        // Jellyfin's direct-stream-provider live TV flow (used for ITunerHost channels) never
+        // calls ILiveStream.Open() itself — it expects the stream to already be open and the
+        // backing file already flowing by the time this method returns. We have to do that work
+        // here ourselves rather than waiting for a callback that never comes.
+        await stream.Open(ct).ConfigureAwait(false);
+        return stream;
     }
 
     public Task<List<TunerHostInfo>> DiscoverDevices(int discoveryDurationMs, CancellationToken ct)

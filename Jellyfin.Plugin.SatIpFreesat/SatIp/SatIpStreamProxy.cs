@@ -36,6 +36,7 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     private FileStream? _fileStream;
     private Task? _pumpTask;
     private bool _videoSynced;
+    private bool _opened;
 
     public string FilePath { get; }
 
@@ -49,49 +50,28 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
         _pids = pids;
         _videoPid = videoPid;
         FilePath = Path.Combine(Path.GetTempPath(), $"satip-live-{Guid.NewGuid():N}.ts");
-        RawDiag($"ctor: proxy constructed, FilePath={FilePath}");
-    }
-
-    private static void RawDiag(string msg)
-    {
-        try
-        {
-            File.AppendAllText("/tmp/satip-diag.log", $"{DateTime.UtcNow:O} {msg}\n");
-        }
-        catch
-        {
-            // best-effort diagnostic only
-        }
     }
 
     public async Task OpenAsync(CancellationToken openCt)
     {
-        RawDiag($"OpenAsync start, TempPath={Path.GetTempPath()}, FilePath={FilePath}");
-        _logger.LogWarning("SAT>IP DIAG: OpenAsync start, TempPath={TempPath}, FilePath={FilePath}", Path.GetTempPath(), FilePath);
+        // Jellyfin's newer direct-stream-provider live TV flow calls ITunerHost.GetChannelStream
+        // and expects the stream to already be flowing by the time it returns — it never invokes
+        // ILiveStream.Open() itself for this flow. SatIpTunerHost.GetChannelStream calls this
+        // explicitly to satisfy that. Guard against a redundant call in case some other Jellyfin
+        // version *does* still call Open() afterwards.
+        if (_opened) return;
+        _opened = true;
 
         _client = new RtspClient(_host, _port, _logger);
         await _client.ConnectAsync(openCt).ConfigureAwait(false);
-        RawDiag("RTSP connected");
-        _logger.LogWarning("SAT>IP DIAG: RTSP connected");
         await _client.SetupAndPlayAsync(_muxParams, _pids, openCt).ConfigureAwait(false);
-        RawDiag("RTSP setup+play done");
-        _logger.LogWarning("SAT>IP DIAG: RTSP setup+play done");
 
         _fileStream = new FileStream(
             FilePath, FileMode.Create, FileAccess.Write, FileShare.Read, 65536, FileOptions.Asynchronous);
-        RawDiag($"FileStream created, exists={File.Exists(FilePath)}");
-        _logger.LogWarning("SAT>IP DIAG: FileStream created, exists={Exists}", File.Exists(FilePath));
 
         await SyncToKeyframeAsync(openCt).ConfigureAwait(false);
-        await _fileStream.FlushAsync(openCt).ConfigureAwait(false);
-        RawDiag($"sync done, videoSynced={_videoSynced}, fileLen={new FileInfo(FilePath).Length}, existsNow={File.Exists(FilePath)}");
-        _logger.LogWarning(
-            "SAT>IP DIAG: sync done, videoSynced={Synced}, fileLen={Len}, existsNow={ExistsNow}",
-            _videoSynced, new FileInfo(FilePath).Length, File.Exists(FilePath));
 
         _pumpTask = Task.Run(() => PumpAsync(_lifetimeCts.Token));
-        RawDiag("OpenAsync returning");
-        _logger.LogWarning("SAT>IP DIAG: OpenAsync returning");
     }
 
     /// <summary>
