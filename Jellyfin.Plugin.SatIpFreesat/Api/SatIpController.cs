@@ -36,6 +36,55 @@ public sealed class SatIpController : ControllerBase
         _logger = logger;
     }
 
+    // ── Plugin configuration (bypasses Jellyfin generic config API) ─────────
+
+    [HttpGet("config")]
+    public ActionResult<PluginConfigResponse> GetConfig()
+    {
+        var cfg = Plugin.Instance?.Configuration;
+        if (cfg is null) return StatusCode(500, "Plugin not loaded");
+        return Ok(new PluginConfigResponse(
+            cfg.ServerAddress,
+            cfg.Tuners,
+            cfg.Postcode,
+            cfg.RegionKey,
+            cfg.RegionLabel,
+            cfg.AutoScanIntervalHours,
+            cfg.EnableStreamSharing,
+            cfg.RtpReceiveBufferKiB,
+            cfg.PacketTimeoutSeconds,
+            cfg.ExposeSubtitleStreams,
+            cfg.PreferredSubtitleLanguage,
+            cfg.ForceDeinterlace));
+    }
+
+    [HttpPost("config")]
+    public ActionResult SaveConfig([FromBody] PluginConfigRequest req)
+    {
+        var plugin = Plugin.Instance;
+        if (plugin is null) return StatusCode(500, "Plugin not loaded");
+        var cfg = plugin.Configuration;
+
+        cfg.ServerAddress = req.ServerAddress ?? cfg.ServerAddress;
+        if (req.Tuners is { Count: > 0 }) cfg.Tuners = req.Tuners;
+        cfg.Postcode = req.Postcode ?? cfg.Postcode;
+        cfg.RegionKey = req.RegionKey ?? cfg.RegionKey;
+        cfg.RegionLabel = req.RegionLabel ?? cfg.RegionLabel;
+        if (req.AutoScanIntervalHours.HasValue) cfg.AutoScanIntervalHours = req.AutoScanIntervalHours.Value;
+        if (req.EnableStreamSharing.HasValue) cfg.EnableStreamSharing = req.EnableStreamSharing.Value;
+        if (req.RtpReceiveBufferKiB.HasValue) cfg.RtpReceiveBufferKiB = req.RtpReceiveBufferKiB.Value;
+        if (req.PacketTimeoutSeconds.HasValue) cfg.PacketTimeoutSeconds = req.PacketTimeoutSeconds.Value;
+        if (req.ExposeSubtitleStreams.HasValue) cfg.ExposeSubtitleStreams = req.ExposeSubtitleStreams.Value;
+        cfg.PreferredSubtitleLanguage = req.PreferredSubtitleLanguage ?? cfg.PreferredSubtitleLanguage;
+        if (req.ForceDeinterlace.HasValue) cfg.ForceDeinterlace = req.ForceDeinterlace.Value;
+
+        plugin.SaveConfiguration();
+        _logger.LogInformation(
+            "SAT>IP config saved: server={Server}, tuners={Tuners}, region={Region}",
+            cfg.ServerAddress, cfg.Tuners.Count, cfg.RegionKey);
+        return Ok(new { message = "Configuration saved." });
+    }
+
     [HttpGet("resolve-region")]
     public ActionResult<ResolveRegionResponse> ResolveRegion([FromQuery] string postcode)
     {
@@ -313,5 +362,35 @@ public sealed class SatIpController : ControllerBase
         public string ServerAddress { get; set; } = string.Empty;
         public List<TunerEntry> Tuners { get; set; } = [];
         public string RegionKey { get; set; } = string.Empty;
+    }
+
+    public sealed record PluginConfigResponse(
+        [property: JsonPropertyName("serverAddress")] string ServerAddress,
+        [property: JsonPropertyName("tuners")] List<TunerEntry> Tuners,
+        [property: JsonPropertyName("postcode")] string Postcode,
+        [property: JsonPropertyName("regionKey")] string RegionKey,
+        [property: JsonPropertyName("regionLabel")] string RegionLabel,
+        [property: JsonPropertyName("autoScanIntervalHours")] int AutoScanIntervalHours,
+        [property: JsonPropertyName("enableStreamSharing")] bool EnableStreamSharing,
+        [property: JsonPropertyName("rtpReceiveBufferKiB")] int RtpReceiveBufferKiB,
+        [property: JsonPropertyName("packetTimeoutSeconds")] int PacketTimeoutSeconds,
+        [property: JsonPropertyName("exposeSubtitleStreams")] bool ExposeSubtitleStreams,
+        [property: JsonPropertyName("preferredSubtitleLanguage")] string PreferredSubtitleLanguage,
+        [property: JsonPropertyName("forceDeinterlace")] bool ForceDeinterlace);
+
+    public sealed class PluginConfigRequest
+    {
+        [JsonPropertyName("serverAddress")] public string? ServerAddress { get; set; }
+        [JsonPropertyName("tuners")] public List<TunerEntry>? Tuners { get; set; }
+        [JsonPropertyName("postcode")] public string? Postcode { get; set; }
+        [JsonPropertyName("regionKey")] public string? RegionKey { get; set; }
+        [JsonPropertyName("regionLabel")] public string? RegionLabel { get; set; }
+        [JsonPropertyName("autoScanIntervalHours")] public int? AutoScanIntervalHours { get; set; }
+        [JsonPropertyName("enableStreamSharing")] public bool? EnableStreamSharing { get; set; }
+        [JsonPropertyName("rtpReceiveBufferKiB")] public int? RtpReceiveBufferKiB { get; set; }
+        [JsonPropertyName("packetTimeoutSeconds")] public int? PacketTimeoutSeconds { get; set; }
+        [JsonPropertyName("exposeSubtitleStreams")] public bool? ExposeSubtitleStreams { get; set; }
+        [JsonPropertyName("preferredSubtitleLanguage")] public string? PreferredSubtitleLanguage { get; set; }
+        [JsonPropertyName("forceDeinterlace")] public bool? ForceDeinterlace { get; set; }
     }
 }
