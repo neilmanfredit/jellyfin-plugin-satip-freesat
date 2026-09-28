@@ -23,31 +23,24 @@ public sealed class SatIpTunerHost : ITunerHost
     public string Name => "SAT>IP Freesat";
     public string Type => "satip-freesat";
 
-    public bool IsSupported
-    {
-        get
-        {
-            var supported = !string.IsNullOrEmpty(Plugin.Instance?.Configuration?.ServerAddress);
-            _logger.LogInformation(
-                "SAT>IP: IsSupported evaluated to {Supported} (PluginInstance={HasInstance}, ServerAddress={ServerAddress})",
-                supported, Plugin.Instance is not null, Plugin.Instance?.Configuration?.ServerAddress);
-            return supported;
-        }
-    }
+    // Jellyfin's TunerHostManager reads IsSupported exactly once, while building its
+    // ITunerHost list at DI-container-construction time — and that happens before
+    // BasePlugin<T>'s constructor has run, so Plugin.Instance is still null at that
+    // instant. Gating on configuration here would permanently exclude this host from
+    // every guide refresh for the process's lifetime, regardless of later config
+    // changes or rescans. GetChannels/DiscoverDevices already return empty results
+    // when unconfigured, so there's nothing to gain by being conditionally supported.
+    public bool IsSupported => true;
 
     public SatIpTunerHost(ILogger<SatIpTunerHost> logger, FreesatChannelStore store)
     {
         _logger = logger;
         _store = store;
-        _logger.LogInformation("SAT>IP: SatIpTunerHost instance constructed");
     }
 
     public Task<List<ChannelInfo>> GetChannels(bool enableCache, CancellationToken ct)
     {
         var scan = _store.Current;
-        _logger.LogInformation(
-            "SAT>IP: GetChannels called (enableCache={EnableCache}), store.Current is {Status}, channel count={Count}",
-            enableCache, scan is null ? "null" : "present", scan?.Channels.Count ?? 0);
         if (scan is null)
             return Task.FromResult(new List<ChannelInfo>());
 
