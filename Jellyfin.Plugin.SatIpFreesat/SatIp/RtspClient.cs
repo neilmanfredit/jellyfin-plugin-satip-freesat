@@ -104,14 +104,29 @@ public sealed class RtspClient : IAsyncDisposable
 
     /// <summary>
     /// Sends a GET_PARAMETER keep-alive over the RTSP TCP channel.
-    /// In UDP mode this is safe to call concurrently with ReadRtpPacketAsync because
-    /// data arrives on a separate UDP socket. In TCP mode, the keep-alive response
-    /// arrives as a plain RTSP message and is skipped by the interleaved read loop.
+    /// In UDP mode this is safe to send-and-read because data arrives on a separate socket.
+    /// In TCP interleaved mode we only WRITE the request — the main RTP read loop already
+    /// consumes the RTSP response via SkipRtspResponseAsync, so reading here would race
+    /// with it and deadlock the scan.
     /// </summary>
     public async Task SendKeepAliveAsync(CancellationToken ct)
     {
         if (_controlUrl is null || _sessionId is null) return;
-        try { await SendRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false); }
+        try
+        {
+            if (_udpReceiver is not null)
+            {
+                // UDP mode: RTP data arrives on a separate socket, so reading the RTSP
+                // response here is safe.
+                await SendRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                // TCP interleaved: only write the request. The main RTP read loop will
+                // receive and discard the RTSP response via SkipRtspResponseAsync.
+                await WriteRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false);
+            }
+        }
         catch { /* best-effort; stream-read loop will detect closure */ }
     }
 
@@ -271,7 +286,7 @@ public sealed class RtspClient : IAsyncDisposable
         _logger.LogInformation("SAT>IP RTSP PLAY: status={Code}", response.StatusCode);
     }
 
-    private async Task<RtspResponse> SendRequestAsync(
+    private async Task WriteRequestAsync(
         string method, string url,
         Dictionary<string, string>? extraHeaders,
         CancellationToken ct)
@@ -291,7 +306,14 @@ public sealed class RtspClient : IAsyncDisposable
 
         var reqBytes = Encoding.ASCII.GetBytes(sb.ToString());
         await _stream.WriteAsync(reqBytes, ct).ConfigureAwait(false);
+    }
 
+    private async Task<RtspResponse> SendRequestAsync(
+        string method, string url,
+        Dictionary<string, string>? extraHeaders,
+        CancellationToken ct)
+    {
+        await WriteRequestAsync(method, url, extraHeaders, ct).ConfigureAwait(false);
         return await ReadResponseAsync(ct).ConfigureAwait(false);
     }
 
