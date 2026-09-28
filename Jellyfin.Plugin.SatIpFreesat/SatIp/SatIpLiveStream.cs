@@ -49,7 +49,13 @@ public sealed class SatIpLiveStream : ILiveStream
             RequiresOpening = true,
             RequiresClosing = false,
             SupportsProbing = true,
-            Container = "ts",
+            // Leave Container unset. Jellyfin's EncodingHelper maps Container="ts" to an
+            // explicit "-f mpegts" flag injected before "-i rtsp://...". That forces ffmpeg
+            // to open the URL via the generic protocol layer instead of auto-detecting the
+            // rtsp demuxer — and "rtsp" isn't a registered ffmpeg URL protocol (only a
+            // demuxer), so the input fails with "Protocol not found". ffprobe already
+            // reports this source's format_name as "rtsp", not "ts"/"mpegts", so leaving
+            // Container unset lets ffmpeg auto-detect correctly, matching what actually works.
             MediaStreams =
             [
                 new MediaStream
