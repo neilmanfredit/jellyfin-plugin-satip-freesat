@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.Configuration;
+using MediaBrowser.Common.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -18,6 +19,8 @@ public sealed class ScanSchedulerService : IHostedService, IDisposable
 {
     private readonly FreesatScanner _scanner;
     private readonly ScanJobService _scanJob;
+    private readonly FreesatChannelStore _store;
+    private readonly IConfigurationManager _configManager;
     private readonly ILogger<ScanSchedulerService> _logger;
     private CancellationTokenSource? _cts;
     private Task? _loopTask;
@@ -25,10 +28,14 @@ public sealed class ScanSchedulerService : IHostedService, IDisposable
     public ScanSchedulerService(
         FreesatScanner scanner,
         ScanJobService scanJob,
+        FreesatChannelStore store,
+        IConfigurationManager configManager,
         ILogger<ScanSchedulerService> logger)
     {
         _scanner = scanner;
         _scanJob = scanJob;
+        _store = store;
+        _configManager = configManager;
         _logger = logger;
     }
 
@@ -57,6 +64,16 @@ public sealed class ScanSchedulerService : IHostedService, IDisposable
         // Give Jellyfin time to fully initialize before checking the schedule.
         try { await Task.Delay(TimeSpan.FromSeconds(60), ct).ConfigureAwait(false); }
         catch (OperationCanceledException) { return; }
+
+        // Re-register with Live TV on every startup, not just after a fresh scan — covers
+        // upgrades where channels were already scanned under an older plugin version that
+        // didn't do this, and recovers if the user ever removes the tuner/provider entries.
+        var startupCfg = Plugin.Instance?.Configuration;
+        if (startupCfg is not null && !string.IsNullOrEmpty(startupCfg.ServerAddress) && _store.Current is not null)
+        {
+            LiveTvAutoRegistrar.EnsureRegistered(
+                _configManager, _logger, startupCfg.ServerAddress, startupCfg.PrimaryTuner.RtspPort);
+        }
 
         while (!ct.IsCancellationRequested)
         {

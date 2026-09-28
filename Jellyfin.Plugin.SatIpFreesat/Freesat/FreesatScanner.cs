@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.DvbSi;
 using Jellyfin.Plugin.SatIpFreesat.SatIp;
+using MediaBrowser.Common.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SatIpFreesat.Freesat;
@@ -22,6 +23,7 @@ public sealed class FreesatScanner
 {
     private readonly ILogger<FreesatScanner> _logger;
     private readonly FreesatChannelStore _store;
+    private readonly IConfigurationManager _configManager;
 
     // How long to collect SI data per mux before moving on
     private static readonly TimeSpan SiCollectTimeout = TimeSpan.FromSeconds(30);
@@ -32,10 +34,11 @@ public sealed class FreesatScanner
     // Bouquet name patterns that identify BSkyB (always excluded)
     private static readonly string[] SkyPrefixes = ["Sky", "BSkyB"];
 
-    public FreesatScanner(ILogger<FreesatScanner> logger, FreesatChannelStore store)
+    public FreesatScanner(ILogger<FreesatScanner> logger, FreesatChannelStore store, IConfigurationManager configManager)
     {
         _logger = logger;
         _store = store;
+        _configManager = configManager;
     }
 
     public async Task<ScanResult> ScanAsync(
@@ -86,6 +89,12 @@ public sealed class FreesatScanner
         };
 
         await _store.SaveAsync(result, scanToken, ct).ConfigureAwait(false);
+
+        // Jellyfin's "Add Tuner Device" / "Add TV Guide Data Provider" dialogs only list
+        // built-in types, so a successful scan is our signal to register ourselves in Live
+        // TV settings directly rather than waiting on a UI action the user can't take.
+        LiveTvAutoRegistrar.EnsureRegistered(_configManager, _logger, host, rtspPort);
+
         return result;
     }
 
