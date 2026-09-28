@@ -53,16 +53,26 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
 
     public async Task OpenAsync(CancellationToken openCt)
     {
+        _logger.LogWarning("SAT>IP DIAG: OpenAsync start, TempPath={TempPath}, FilePath={FilePath}", Path.GetTempPath(), FilePath);
+
         _client = new RtspClient(_host, _port, _logger);
         await _client.ConnectAsync(openCt).ConfigureAwait(false);
+        _logger.LogWarning("SAT>IP DIAG: RTSP connected");
         await _client.SetupAndPlayAsync(_muxParams, _pids, openCt).ConfigureAwait(false);
+        _logger.LogWarning("SAT>IP DIAG: RTSP setup+play done");
 
         _fileStream = new FileStream(
             FilePath, FileMode.Create, FileAccess.Write, FileShare.Read, 65536, FileOptions.Asynchronous);
+        _logger.LogWarning("SAT>IP DIAG: FileStream created, exists={Exists}", File.Exists(FilePath));
 
         await SyncToKeyframeAsync(openCt).ConfigureAwait(false);
+        await _fileStream.FlushAsync(openCt).ConfigureAwait(false);
+        _logger.LogWarning(
+            "SAT>IP DIAG: sync done, videoSynced={Synced}, fileLen={Len}, existsNow={ExistsNow}",
+            _videoSynced, new FileInfo(FilePath).Length, File.Exists(FilePath));
 
         _pumpTask = Task.Run(() => PumpAsync(_lifetimeCts.Token));
+        _logger.LogWarning("SAT>IP DIAG: OpenAsync returning");
     }
 
     /// <summary>
