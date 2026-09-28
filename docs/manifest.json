@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.16.0",
+        "changelog": "feat: auto-register tuner device and EPG provider in Live TV settings",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.16/jellyfin-plugin-satip-freesat-v1.9.16-jellyfin12.zip",
+        "checksum": "1c1027cabb2f2e4a193be670d23d80a6",
+        "timestamp": "2026-09-28T15:56:31Z"
+      },
+      {
+        "version": "1.9.16.0",
+        "changelog": "feat: auto-register tuner device and EPG provider in Live TV settings",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.16/jellyfin-plugin-satip-freesat-v1.9.16-jellyfin10.zip",
+        "checksum": "fa74a827be4dc7f7dc997bc18f776567",
+        "timestamp": "2026-09-28T15:56:31Z"
+      },
+      {
         "version": "1.9.15.0",
         "changelog": "fix: stale scan from a hot-reloaded plugin version can no longer clobber newer results",
         "targetAbi": "12.0.0.0",
