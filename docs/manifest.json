@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.14.0",
+        "changelog": "fix: NIT symbol rate BCD units were 10x too low",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.14/jellyfin-plugin-satip-freesat-v1.9.14-jellyfin12.zip",
+        "checksum": "6134a2b85f3a270527cc200ed2673a6c",
+        "timestamp": "2026-09-28T15:36:27Z"
+      },
+      {
+        "version": "1.9.14.0",
+        "changelog": "fix: NIT symbol rate BCD units were 10x too low",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.14/jellyfin-plugin-satip-freesat-v1.9.14-jellyfin10.zip",
+        "checksum": "f2bea7c923370568199a9449d15649d6",
+        "timestamp": "2026-09-28T15:36:27Z"
+      },
+      {
         "version": "1.9.13.0",
         "changelog": "fix: NIT frequency BCD units were 10x too low",
         "targetAbi": "12.0.0.0",
