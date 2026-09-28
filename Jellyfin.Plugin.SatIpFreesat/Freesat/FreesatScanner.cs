@@ -48,6 +48,12 @@ public sealed class FreesatScanner
 
         _logger.LogInformation("SAT>IP Freesat scan: host={Host} region={Region}", host, region.Label);
 
+        // Claim the "most recent scan" slot up front. If a plugin hot-reload starts a newer
+        // scan while this one is still running (e.g. an in-flight scan left over from a
+        // previous plugin version), this scan's eventual save will be rejected in favour of
+        // the newer one's results.
+        var scanToken = _store.BeginScan();
+
         // Auto-detect which frontend (LNB port) has signal, and whether the device requires
         // UDP transport (some devices agree to TCP in SETUP but never send data via it).
         progress?.Report(new("Detecting active LNB port and transport…", null));
@@ -79,7 +85,7 @@ public sealed class FreesatScanner
             UseUdpTransport = useUdp,
         };
 
-        await _store.SaveAsync(result, ct).ConfigureAwait(false);
+        await _store.SaveAsync(result, scanToken, ct).ConfigureAwait(false);
         return result;
     }
 
