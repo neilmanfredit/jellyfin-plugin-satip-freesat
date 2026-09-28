@@ -66,6 +66,17 @@ public sealed class SatIpLiveStream : ILiveStream
                     // IsInterlaced hints Jellyfin's transcoder to apply a deinterlace filter.
                     // Has no effect on direct-play paths (ffmpeg owns the connection there).
                     IsInterlaced = cfg.ForceDeinterlace,
+                    // Freesat mandates MPEG-4 AVC across its entire platform (unlike Freeview,
+                    // it has never carried MPEG-2 video) at 8-bit 4:2:0, confirmed by direct
+                    // ffprobe/ffmpeg testing against the live RTSP source. Jellyfin's
+                    // EncodingHelper.GetQsvHwVidDecoder (and the VAAPI/NVENC equivalents)
+                    // require BOTH Codec and PixelFormat to be set before it will select a
+                    // hardware decoder; leaving them null forces software decode, which then
+                    // pairs with the QSV *encoder* down a code path that never inserts an
+                    // hwupload filter — the sw-decoded frames never reach the QSV encoder as
+                    // hardware surfaces, so hevc_qsv silently stalls encoding zero frames.
+                    Codec = "h264",
+                    PixelFormat = "yuv420p",
                 },
                 new MediaStream
                 {
