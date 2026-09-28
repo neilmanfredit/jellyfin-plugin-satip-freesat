@@ -44,15 +44,21 @@ public sealed class SatIpTunerHost : ITunerHost
         if (scan is null)
             return Task.FromResult(new List<ChannelInfo>());
 
-        var channels = scan.Channels.Select(ch => new ChannelInfo
+        var channels = scan.Channels.Select(ch =>
         {
-            Id = ch.ChannelId,
-            Name = ch.Name,
-            Number = ch.Number.ToString(),
-            ChannelType = ch.IsRadio ? ChannelType.Radio : ChannelType.TV,
-            IsHD = ch.IsHD,
-            TunerHostId = Type,
-            TunerChannelId = ch.ChannelId,
+            var logoUrl = ChannelLogoProvider.GetLogoUrl(ch.Name);
+            return new ChannelInfo
+            {
+                Id = ch.ChannelId,
+                Name = ch.Name,
+                Number = ch.Number.ToString(),
+                ChannelType = ch.IsRadio ? ChannelType.Radio : ChannelType.TV,
+                IsHD = ch.IsHD,
+                TunerHostId = Type,
+                TunerChannelId = ch.ChannelId,
+                ImageUrl = logoUrl,
+                HasImage = logoUrl is not null,
+            };
         }).ToList();
 
         return Task.FromResult(channels);
