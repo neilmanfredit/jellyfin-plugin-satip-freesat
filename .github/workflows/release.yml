@@ -155,6 +155,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/manifest.json
           git diff --staged --quiet || git commit -m "chore: update manifest for ${TAG}"
+          git pull --rebase origin main
           git push origin HEAD:main
 
       # ── GitHub Release ────────────────────────────────────────────────────
