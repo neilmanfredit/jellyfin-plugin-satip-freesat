@@ -13,9 +13,11 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
     {
         serviceCollection.AddSingleton<FreesatChannelStore>();
         serviceCollection.AddSingleton<FreesatScanner>();
+        serviceCollection.AddSingleton<ScanJobService>();
         serviceCollection.AddSingleton<SatIpTunerHost>();
         serviceCollection.AddSingleton<ITunerHost>(sp => sp.GetRequiredService<SatIpTunerHost>());
         serviceCollection.AddSingleton<FreesatEpgProvider>();
         serviceCollection.AddSingleton<IListingsProvider>(sp => sp.GetRequiredService<FreesatEpgProvider>());
+        serviceCollection.AddHostedService<ScanSchedulerService>();
     }
 }

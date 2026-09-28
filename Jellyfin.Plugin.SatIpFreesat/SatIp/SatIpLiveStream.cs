@@ -20,7 +20,7 @@ public sealed class SatIpLiveStream : ILiveStream
 {
     public string OriginalStreamId { get; set; }
     public string UniqueId { get; } = Guid.NewGuid().ToString("N");
-    public bool EnableStreamSharing { get; } = true;
+    public bool EnableStreamSharing { get; }
     public int ConsumerCount { get; set; }
     public string TunerHostId { get; }
     public TunerChannelMapping TunerChannelMapping { get; set; } = null!;
@@ -29,11 +29,12 @@ public sealed class SatIpLiveStream : ILiveStream
     /// <summary>Which SAT>IP frontend (src=) this stream is using.</summary>
     public int FrontendNumber { get; }
 
-    public SatIpLiveStream(FreesatChannel channel, string serverAddress, TunerEntry tuner)
+    public SatIpLiveStream(FreesatChannel channel, string serverAddress, TunerEntry tuner, Configuration.PluginConfiguration cfg)
     {
         FrontendNumber = tuner.FrontendNumber;
         OriginalStreamId = channel.ChannelId;
         TunerHostId = "satip-freesat";
+        EnableStreamSharing = cfg.EnableStreamSharing;
 
         var rtspUrl = BuildRtspUrl(channel, serverAddress, tuner.RtspPort, tuner.FrontendNumber);
 
@@ -56,6 +57,9 @@ public sealed class SatIpLiveStream : ILiveStream
                     Type = MediaStreamType.Video,
                     Index = 0,
                     IsDefault = true,
+                    // IsInterlaced hints Jellyfin's transcoder to apply a deinterlace filter.
+                    // Has no effect on direct-play paths (ffmpeg owns the connection there).
+                    IsInterlaced = cfg.ForceDeinterlace,
                 },
                 new MediaStream
                 {
