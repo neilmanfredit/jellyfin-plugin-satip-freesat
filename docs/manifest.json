@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.7.0",
+        "changelog": "fix: add dedicated config GET/POST endpoints to bypass Jellyfin 12 config cache",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.7/jellyfin-plugin-satip-freesat-v1.9.7-jellyfin12.zip",
+        "checksum": "a4a84ce0c437f442f9c0a64ee9665d1e",
+        "timestamp": "2026-09-28T13:18:08Z"
+      },
+      {
+        "version": "1.9.7.0",
+        "changelog": "fix: add dedicated config GET/POST endpoints to bypass Jellyfin 12 config cache",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.7/jellyfin-plugin-satip-freesat-v1.9.7-jellyfin10.zip",
+        "checksum": "ef5d136d4939f5c4f24ad8888a24e534",
+        "timestamp": "2026-09-28T13:18:08Z"
+      },
+      {
         "version": "1.9.6.0",
         "changelog": "fix: remove IsHdTier bouquet filter that caused 0 channels; add scan progress to status page",
         "targetAbi": "12.0.0.0",
