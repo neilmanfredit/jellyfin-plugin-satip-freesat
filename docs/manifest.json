@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.8.0",
+        "changelog": "fix: keep-alive no longer deadlocks TCP interleaved scan",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.8/jellyfin-plugin-satip-freesat-v1.9.8-jellyfin12.zip",
+        "checksum": "c69188eb1f4528022d844b264d6a1a54",
+        "timestamp": "2026-09-28T13:37:18Z"
+      },
+      {
+        "version": "1.9.8.0",
+        "changelog": "fix: keep-alive no longer deadlocks TCP interleaved scan",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.8/jellyfin-plugin-satip-freesat-v1.9.8-jellyfin10.zip",
+        "checksum": "ced13a4630c3e1e4f2c7bbb4ab42dd47",
+        "timestamp": "2026-09-28T13:37:18Z"
+      },
+      {
         "version": "1.9.7.0",
         "changelog": "fix: add dedicated config GET/POST endpoints to bypass Jellyfin 12 config cache",
         "targetAbi": "12.0.0.0",
