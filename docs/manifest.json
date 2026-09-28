@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.12.0",
+        "changelog": "fix: TeardownAsync no longer reads a response, only writes",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.12/jellyfin-plugin-satip-freesat-v1.9.12-jellyfin12.zip",
+        "checksum": "59ea1bacb54ac5a034ab07191aca287b",
+        "timestamp": "2026-09-28T15:12:48Z"
+      },
+      {
+        "version": "1.9.12.0",
+        "changelog": "fix: TeardownAsync no longer reads a response, only writes",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.12/jellyfin-plugin-satip-freesat-v1.9.12-jellyfin10.zip",
+        "checksum": "c462b0b83d569ca9256131e028293798",
+        "timestamp": "2026-09-28T15:12:48Z"
+      },
+      {
         "version": "1.9.11.0",
         "changelog": "fix: SkipRtspResponseAsync consumes body and checks cancellation",
         "targetAbi": "12.0.0.0",
