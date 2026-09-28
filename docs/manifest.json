@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.20.0",
+        "changelog": "fix: set Codec/PixelFormat on live stream MediaStream — HW transcode was stalling at zero frames",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.20/jellyfin-plugin-satip-freesat-v1.9.20-jellyfin12.zip",
+        "checksum": "cfa62553b1a394bbc7ae12fd41a92ce0",
+        "timestamp": "2026-09-28T17:35:09Z"
+      },
+      {
+        "version": "1.9.20.0",
+        "changelog": "fix: set Codec/PixelFormat on live stream MediaStream — HW transcode was stalling at zero frames",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.20/jellyfin-plugin-satip-freesat-v1.9.20-jellyfin10.zip",
+        "checksum": "096a40a7aa43428146023b45b574c7d6",
+        "timestamp": "2026-09-28T17:35:09Z"
+      },
+      {
         "version": "1.9.19.0",
         "changelog": "fix: strip DVB control codes from EPG text; add channel logos",
         "targetAbi": "12.0.0.0",
