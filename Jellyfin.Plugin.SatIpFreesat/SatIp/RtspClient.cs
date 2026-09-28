@@ -380,13 +380,63 @@ public sealed class RtspClient : IAsyncDisposable
 
     private async Task SkipRtspResponseAsync(CancellationToken ct)
     {
-        // Discard bytes until we see \r\n\r\n (end of headers)
-        int consecutive = 0;
-        while (consecutive < 4)
+        // We've already consumed the first 4 bytes of the response (e.g. "RTSP") in
+        // ReadRtpPacketTcpAsync. Read and discard the rest: remaining header lines + body.
+        //
+        // The naive "read until \r\n\r\n" approach has two problems:
+        //   1. It leaves any response body unread, corrupting the stream for subsequent calls.
+        //   2. If called while binary RTP data is present, ReadAsync completes synchronously
+        //      and never suspends — so the CancellationToken is never checked, hanging the
+        //      scan indefinitely even after the timeout CTS has fired.
+        //
+        // Fix: parse Content-Length from headers, consume the body, and explicitly call
+        // ct.ThrowIfCancellationRequested() at each iteration to honour cancellation during
+        // synchronous-completing reads.
+
+        var lineBuffer = new List<byte>(128);
+        int contentLength = 0;
+
+        // Read header lines until blank line.
+        while (true)
         {
+            ct.ThrowIfCancellationRequested();
             var b = await ReadByteAsync(ct).ConfigureAwait(false);
-            if (b is (byte)'\r' or (byte)'\n') consecutive++;
-            else consecutive = 0;
+
+            if (b == (byte)'\n')
+            {
+                int len = lineBuffer.Count;
+                if (len > 0 && lineBuffer[len - 1] == (byte)'\r') len--;
+                var line = Encoding.ASCII.GetString(lineBuffer.ToArray(), 0, len);
+                lineBuffer.Clear();
+
+                if (line.Length == 0) break; // blank line = end of headers
+
+                var colon = line.IndexOf(':');
+                if (colon > 0 &&
+                    line[..colon].Trim().Equals("content-length", StringComparison.OrdinalIgnoreCase))
+                {
+                    int.TryParse(line[(colon + 1)..].Trim(), out contentLength);
+                }
+            }
+            else
+            {
+                lineBuffer.Add(b);
+            }
+        }
+
+        // Consume the response body so the stream position is correct for the next frame.
+        if (contentLength > 0)
+        {
+            var buf = new byte[Math.Min(contentLength, 4096)];
+            int remaining = contentLength;
+            while (remaining > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+                int toRead = Math.Min(remaining, buf.Length);
+                int n = await _stream!.ReadAsync(buf.AsMemory(0, toRead), ct).ConfigureAwait(false);
+                if (n == 0) break;
+                remaining -= n;
+            }
         }
     }
 
