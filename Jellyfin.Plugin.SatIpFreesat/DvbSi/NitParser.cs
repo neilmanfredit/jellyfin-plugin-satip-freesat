@@ -118,8 +118,8 @@ public static class NitParser
         return digits / 10.0;
     }
 
-    // Symbol rate: 28-bit BCD (upper 28 bits of bytes 7-10), units of MSym/s with 5 decimal places.
-    // e.g. 27500 kSym/s = 27.5 MSym/s → 0x2750000 (7 nibbles) → digits=2750000 → 2750000/100 = 27500 kSym/s
+    // Symbol rate: 28-bit BCD (upper 28 bits of bytes 7-10), units of 100 sym/s (EN 300 468).
+    // e.g. 27500 kSym/s = 27,500,000 sym/s / 100 = 275000 → BCD digits "0275000".
     private static double ParseBcdSymbolRate(ReadOnlySpan<byte> d)
     {
         // Bytes 0-3 of d (d[7..10] of original); lower nibble of d[3] is FEC_inner, not part of SR.
@@ -130,6 +130,7 @@ public static class NitParser
             digits = digits * 10 + (d[b] & 0xF);
         }
         digits = digits * 10 + ((d[3] >> 4) & 0xF); // upper nibble of 4th byte only
-        return digits / 100.0; // result in kSym/s
+        // digits is in units of 100 sym/s: digits=275000 → 275000*100 sym/s = 27,500,000 sym/s = 27500 kSym/s.
+        return digits / 10.0; // result in kSym/s
     }
 }
