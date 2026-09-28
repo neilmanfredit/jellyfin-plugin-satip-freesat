@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.13.0",
+        "changelog": "fix: NIT frequency BCD units were 10x too low",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.13/jellyfin-plugin-satip-freesat-v1.9.13-jellyfin12.zip",
+        "checksum": "26961062e9cb38ba2d958649b872fb0c",
+        "timestamp": "2026-09-28T15:23:35Z"
+      },
+      {
+        "version": "1.9.13.0",
+        "changelog": "fix: NIT frequency BCD units were 10x too low",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.13/jellyfin-plugin-satip-freesat-v1.9.13-jellyfin10.zip",
+        "checksum": "35f43e6cc2bbc2259811a3a11564cb42",
+        "timestamp": "2026-09-28T15:23:35Z"
+      },
+      {
         "version": "1.9.12.0",
         "changelog": "fix: TeardownAsync no longer reads a response, only writes",
         "targetAbi": "12.0.0.0",
