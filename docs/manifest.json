@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.26.0",
+        "changelog": "fix: open SAT>IP proxy synchronously in GetChannelStream, not via ILiveStream.Open",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.26/jellyfin-plugin-satip-freesat-v1.9.26-jellyfin12.zip",
+        "checksum": "139a0ec7397e730e7480debc6b4d59d6",
+        "timestamp": "2026-09-28T22:01:11Z"
+      },
+      {
+        "version": "1.9.26.0",
+        "changelog": "fix: open SAT>IP proxy synchronously in GetChannelStream, not via ILiveStream.Open",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.26/jellyfin-plugin-satip-freesat-v1.9.26-jellyfin10.zip",
+        "checksum": "c546de5d517b9ed6e4bfd2210543a8b1",
+        "timestamp": "2026-09-28T22:01:11Z"
+      },
+      {
         "version": "1.9.25.0",
         "changelog": "debug: add raw file diagnostics bypassing ILogger to confirm OpenAsync execution",
         "targetAbi": "12.0.0.0",
