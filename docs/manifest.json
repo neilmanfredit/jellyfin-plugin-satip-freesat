@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.24.0",
+        "changelog": "debug: add diagnostic logging to SatIpStreamProxy.OpenAsync",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.24/jellyfin-plugin-satip-freesat-v1.9.24-jellyfin12.zip",
+        "checksum": "3171b3392cbdbfb65b79823b43537bd9",
+        "timestamp": "2026-09-28T20:11:34Z"
+      },
+      {
+        "version": "1.9.24.0",
+        "changelog": "debug: add diagnostic logging to SatIpStreamProxy.OpenAsync",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.24/jellyfin-plugin-satip-freesat-v1.9.24-jellyfin10.zip",
+        "checksum": "d17ac14ee6c00d1ebc600f394e34542a",
+        "timestamp": "2026-09-28T20:11:34Z"
+      },
+      {
         "version": "1.9.23.0",
         "changelog": "fix: keyframe-sync no longer strips PAT/PMT/audio from pre-buffer",
         "targetAbi": "12.0.0.0",
