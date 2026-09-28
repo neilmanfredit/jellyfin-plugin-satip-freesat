@@ -461,6 +461,7 @@ public sealed class FreesatScanner
             foreach (var entry in bq.Services)
             {
                 if (entry.LogicalChannelNumber <= 0) continue;
+                if (!entry.IsVisible) continue; // hidden services (SSU, test cards, etc.)
                 if (!lcnMap.TryGetValue(entry.LogicalChannelNumber, out var existing))
                 {
                     lcnMap[entry.LogicalChannelNumber] = (entry, isRegion);

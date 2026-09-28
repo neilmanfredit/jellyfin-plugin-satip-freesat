@@ -21,18 +21,18 @@ public sealed class SatIpController : ControllerBase
 {
     private readonly FreesatScanner _scanner;
     private readonly FreesatChannelStore _store;
+    private readonly ScanJobService _scanJob;
     private readonly ILogger<SatIpController> _logger;
-
-    // Shared across all controller instances (controllers are transient)
-    private static readonly ScanJobTracker _scanJob = new();
 
     public SatIpController(
         FreesatScanner scanner,
         FreesatChannelStore store,
+        ScanJobService scanJob,
         ILogger<SatIpController> logger)
     {
         _scanner = scanner;
         _store = store;
+        _scanJob = scanJob;
         _logger = logger;
     }
 
@@ -165,13 +165,13 @@ public sealed class SatIpController : ControllerBase
             }
         });
 
-        return Accepted(_scanJob.GetProgress());
+        return Accepted(ToResponse(_scanJob.GetProgress()));
     }
 
     [HttpGet("scan/progress")]
     public ActionResult<ScanProgressResponse> GetScanProgress()
     {
-        var prog = _scanJob.GetProgress();
+        var prog = ToResponse(_scanJob.GetProgress());
 
         // When idle, enrich with last stored scan result so callers don't need a second endpoint
         if (prog.State == "idle")
@@ -187,6 +187,9 @@ public sealed class SatIpController : ControllerBase
 
         return Ok(prog);
     }
+
+    private static ScanProgressResponse ToResponse(ScanJobService.ScanProgressInfo p) =>
+        new(p.State, p.Message, p.ChannelCount, p.Percent);
 
     [HttpGet("status")]
     public ActionResult<ScanStatusResponse> GetStatus()
@@ -264,47 +267,6 @@ public sealed class SatIpController : ControllerBase
     {
         _store.Invalidate();
         return Ok(new { message = "Channel store cleared. Trigger a new scan to repopulate." });
-    }
-
-    // ── Scan job tracker ────────────────────────────────────────────────────────
-
-    private sealed class ScanJobTracker
-    {
-        private string _state = "idle";
-        private string _message = "No scan run yet — click Scan to begin";
-        private int _channelCount;
-        private int? _percent;
-        private readonly object _lock = new();
-
-        public bool TryStart()
-        {
-            lock (_lock)
-            {
-                if (_state == "scanning") return false;
-                _state = "scanning";
-                _message = "Starting scan…";
-                _channelCount = 0;
-                _percent = null;
-                return true;
-            }
-        }
-
-        public void Update(string message, int? percent) { lock (_lock) { _message = message; _percent = percent; } }
-
-        public void Complete(int count, string message)
-        {
-            lock (_lock) { _state = "done"; _channelCount = count; _message = message; _percent = 100; }
-        }
-
-        public void Fail(string message)
-        {
-            lock (_lock) { _state = "failed"; _message = message; _percent = null; }
-        }
-
-        public ScanProgressResponse GetProgress()
-        {
-            lock (_lock) { return new ScanProgressResponse(_state, _message, _channelCount, _percent); }
-        }
     }
 
     // ── Request / response types ────────────────────────────────────────────────
