@@ -22,17 +22,32 @@ public sealed class SatIpTunerHost : ITunerHost
 
     public string Name => "SAT>IP Freesat";
     public string Type => "satip-freesat";
-    public bool IsSupported => !string.IsNullOrEmpty(Plugin.Instance?.Configuration?.ServerAddress);
+
+    public bool IsSupported
+    {
+        get
+        {
+            var supported = !string.IsNullOrEmpty(Plugin.Instance?.Configuration?.ServerAddress);
+            _logger.LogInformation(
+                "SAT>IP: IsSupported evaluated to {Supported} (PluginInstance={HasInstance}, ServerAddress={ServerAddress})",
+                supported, Plugin.Instance is not null, Plugin.Instance?.Configuration?.ServerAddress);
+            return supported;
+        }
+    }
 
     public SatIpTunerHost(ILogger<SatIpTunerHost> logger, FreesatChannelStore store)
     {
         _logger = logger;
         _store = store;
+        _logger.LogInformation("SAT>IP: SatIpTunerHost instance constructed");
     }
 
     public Task<List<ChannelInfo>> GetChannels(bool enableCache, CancellationToken ct)
     {
         var scan = _store.Current;
+        _logger.LogInformation(
+            "SAT>IP: GetChannels called (enableCache={EnableCache}), store.Current is {Status}, channel count={Count}",
+            enableCache, scan is null ? "null" : "present", scan?.Channels.Count ?? 0);
         if (scan is null)
             return Task.FromResult(new List<ChannelInfo>());
 
