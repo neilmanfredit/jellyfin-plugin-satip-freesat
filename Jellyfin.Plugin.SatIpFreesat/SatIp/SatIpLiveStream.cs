@@ -108,7 +108,27 @@ public sealed class SatIpLiveStream : ILiveStream
                   $"&freq={mux.FrequencyMHz:F3}&pol={pol}&msys={msys}&sr={sr}&fec=auto";
         if (mux.IsDvbS2)
             url += $"&ro=0.35&mtype={mux.ModulationType}";
-        url += "&pids=all";
+
+        if (channel.PmtPid is int pmtPid && channel.VideoPid is int videoPid)
+        {
+            // Request only PAT + this channel's PMT + its video (+ audio, if known) elementary
+            // streams. "pids=all" used to be sent here, which makes minisatip deliver the
+            // *entire* transponder — every channel sharing the mux, potentially 5+ programs
+            // and dozens of streams. That blows ffmpeg's probe budget (repeated SIGKILL/
+            // cancel retry loops) and breaks the hardcoded MediaStream.Index=0/1 mapping below,
+            // since index 0/1 of the full multiplex doesn't correspond to this channel's
+            // actual video/audio streams once other programs are present.
+            var pids = $"0,{pmtPid},{videoPid}";
+            if (channel.AudioPid is int audioPid) pids += $",{audioPid}";
+            url += $"&pids={pids}";
+        }
+        else
+        {
+            // Scan couldn't resolve this channel's PMT/PIDs (e.g. PAT/PMT collection timed
+            // out on a busy mux) — fall back to the old behaviour rather than fail to play.
+            url += "&pids=all";
+        }
+
         return url;
     }
 }

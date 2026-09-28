@@ -308,41 +308,108 @@ public sealed class FreesatScanner
             ModulationType = mux.ModulationType,
         };
 
-        await using var client = new RtspClient(host, port, _logger);
-        if (useUdp) client.EnableUdpTransport();
-
-        using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        handshakeCts.CancelAfter(RtspHandshakeTimeout);
-        try
+        // Phase 1: SDT (service names) + PAT (service_id → PMT PID map). We need the PAT to
+        // know which PID to ask for in phase 2 — it isn't known up front.
+        var patMap = new Dictionary<int, int>();
+        await using (var client = new RtspClient(host, port, _logger))
         {
-            await client.ConnectAsync(handshakeCts.Token).ConfigureAwait(false);
-            await client.SetupAndPlayAsync(muxParams, "17", handshakeCts.Token).ConfigureAwait(false);
+            if (useUdp) client.EnableUdpTransport();
+
+            using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            handshakeCts.CancelAfter(RtspHandshakeTimeout);
+            try
+            {
+                await client.ConnectAsync(handshakeCts.Token).ConfigureAwait(false);
+                await client.SetupAndPlayAsync(muxParams, "0,17", handshakeCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "SAT>IP: RTSP handshake timed out for {Freq}{Pol} — skipping mux",
+                    mux.FrequencyMHz, mux.Polarization);
+                return [];
+            }
+
+            var reader = new TsReader();
+            reader.SubscribePid(SdtParser.PidSdt);
+            reader.SubscribePid(PmtParser.PidPat);
+            reader.SectionReady += (pid, section) =>
+            {
+                if (pid == PmtParser.PidPat)
+                {
+                    foreach (var (svcId, pmtPid) in PmtParser.ParsePat(section))
+                        patMap.TryAdd(svcId, pmtPid);
+                    return;
+                }
+
+                // Only accept SDT-Actual: SDT-Other describes services on foreign TSes, but
+                // the mux we assign here is the one we're tuned to, giving the wrong TSID for
+                // lookups.
+                if (section.Length == 0 || section[0] != SdtParser.TableIdSdtActual) return;
+                foreach (var svc in SdtParser.Parse(section))
+                    services.TryAdd(svc.ServiceId, svc);
+            };
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(15));
+            try { await ReadStreamAsync(client, reader, TimeSpan.FromSeconds(15), timeout.Token, _logger).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { /* per-mux timeout */ }
+
+            await client.TeardownAsync(ct).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+
+        // Phase 2: PMT sections for each discovered service's PMT PID → video/audio elementary
+        // PIDs. These let live playback request just one channel's streams instead of the
+        // whole multiplex (pids=all made ffmpeg probe every channel on the mux and broke the
+        // hardcoded video/audio stream-index mapping). Services whose PMT PID never resolved
+        // (e.g. PAT never arrived) simply fall back to pids=all at playback time.
+        var pmtPids = services.Values
+            .Where(s => patMap.ContainsKey(s.ServiceId))
+            .Select(s => patMap[s.ServiceId])
+            .Distinct()
+            .ToList();
+
+        if (pmtPids.Count > 0)
         {
-            _logger.LogWarning(
-                "SAT>IP: RTSP handshake timed out for {Freq}{Pol} — skipping mux",
-                mux.FrequencyMHz, mux.Polarization);
-            return [];
+            try
+            {
+                await using var client = new RtspClient(host, port, _logger);
+                if (useUdp) client.EnableUdpTransport();
+
+                using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                handshakeCts.CancelAfter(RtspHandshakeTimeout);
+                await client.ConnectAsync(handshakeCts.Token).ConfigureAwait(false);
+                await client.SetupAndPlayAsync(muxParams, string.Join(',', pmtPids), handshakeCts.Token).ConfigureAwait(false);
+
+                var reader = new TsReader();
+                foreach (var pid in pmtPids) reader.SubscribePid(pid);
+                reader.SectionReady += (_, section) =>
+                {
+                    var info = PmtParser.ParsePmt(section);
+                    if (info is null) return;
+                    if (services.TryGetValue(info.ServiceId, out var svc))
+                    {
+                        svc.PmtPid = patMap.GetValueOrDefault(info.ServiceId);
+                        svc.VideoPid = info.VideoPid;
+                        svc.AudioPid = info.AudioPid;
+                    }
+                };
+
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                try { await ReadStreamAsync(client, reader, TimeSpan.FromSeconds(10), timeout.Token, _logger).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested) { /* per-mux timeout */ }
+
+                await client.TeardownAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "SAT>IP: PMT collection timed out for {Freq}{Pol} — its channels will fall back to pids=all at playback",
+                    mux.FrequencyMHz, mux.Polarization);
+            }
         }
 
-        var reader = new TsReader();
-        reader.SubscribePid(SdtParser.PidSdt);
-        reader.SectionReady += (_, section) =>
-        {
-            // Only accept SDT-Actual: SDT-Other describes services on foreign TSes, but the
-            // mux we assign here is the one we're tuned to, giving the wrong TSID for lookups.
-            if (section[0] != SdtParser.TableIdSdtActual) return;
-            foreach (var svc in SdtParser.Parse(section))
-                services.TryAdd(svc.ServiceId, svc);
-        };
-
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        try { await ReadStreamAsync(client, reader, TimeSpan.FromSeconds(15), timeout.Token, _logger).ConfigureAwait(false); }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { /* per-mux timeout */ }
-
-        await client.TeardownAsync(ct).ConfigureAwait(false);
         return services.Values.ToList();
     }
 
@@ -521,6 +588,9 @@ public sealed class FreesatScanner
                 IsRadio = svc.IsRadio,
                 Mux = svc.Mux!,
                 ServiceId = svc.ServiceId,
+                PmtPid = svc.PmtPid,
+                VideoPid = svc.VideoPid,
+                AudioPid = svc.AudioPid,
             });
         }
 
@@ -560,6 +630,9 @@ public sealed class FreesatScanner
                 IsRadio = svc.IsRadio,
                 Mux = svc.Mux,
                 ServiceId = svc.ServiceId,
+                PmtPid = svc.PmtPid,
+                VideoPid = svc.VideoPid,
+                AudioPid = svc.AudioPid,
             });
         }
 

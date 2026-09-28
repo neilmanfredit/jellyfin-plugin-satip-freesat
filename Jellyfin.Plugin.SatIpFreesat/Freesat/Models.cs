@@ -37,8 +37,14 @@ public sealed class ServiceInfo
     public bool IsHD => ServiceType is 0x11 or 0x19 or 0x1F;
     public bool IsRadio => ServiceType is 0x02 or 0x0A;
 
-    /// <summary>RTSP pids parameter: PMT PID is found via PAT; for live streaming we use "all".</summary>
-    public string PidsParam { get; set; } = "all";
+    /// <summary>PMT PID for this service, resolved from the mux's PAT during scan (null if unresolved).</summary>
+    public int? PmtPid { get; set; }
+
+    /// <summary>Video elementary PID, resolved from this service's PMT during scan.</summary>
+    public int? VideoPid { get; set; }
+
+    /// <summary>Primary audio elementary PID, resolved from this service's PMT during scan.</summary>
+    public int? AudioPid { get; set; }
 }
 
 /// <summary>A Freesat bouquet entry associating a service with an LCN.</summary>
@@ -71,6 +77,15 @@ public sealed class FreesatChannel
     public bool IsRadio { get; init; }
     public MuxInfo Mux { get; init; } = null!;
     public int ServiceId { get; init; }
+
+    /// <summary>PMT PID, resolved from the mux's PAT during scan (null if unresolved).</summary>
+    public int? PmtPid { get; init; }
+
+    /// <summary>Video elementary PID, resolved from this channel's PMT during scan.</summary>
+    public int? VideoPid { get; init; }
+
+    /// <summary>Primary audio elementary PID, resolved from this channel's PMT during scan.</summary>
+    public int? AudioPid { get; init; }
 }
 
 /// <summary>Persisted result of a channel scan.</summary>
