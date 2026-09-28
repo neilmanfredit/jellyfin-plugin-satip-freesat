@@ -50,5 +50,10 @@ public sealed class FreesatChannelStore
         }
     }
 
-    public void Invalidate() => _cache = null;
+    public void Invalidate()
+    {
+        _cache = null;
+        try { if (File.Exists(_cachePath)) File.Delete(_cachePath); }
+        catch (Exception ex) { _logger.LogWarning(ex, "SAT>IP Freesat: could not delete channel cache at {Path}", _cachePath); }
+    }
 }

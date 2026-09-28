@@ -331,7 +331,7 @@ public sealed class FreesatScanner
         return services.Values.ToList();
     }
 
-    private static async Task ReadStreamAsync(
+    internal static async Task ReadStreamAsync(
         RtspClient client, TsReader reader, TimeSpan timeout, CancellationToken ct,
         ILogger? logger = null)
     {

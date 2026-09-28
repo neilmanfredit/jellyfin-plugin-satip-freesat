@@ -114,18 +114,11 @@ public sealed class FreesatEpgProvider : IListingsProvider
                     p.StartDate < endDate));
             };
 
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(45));
-            try
-            {
-                while (!cts.IsCancellationRequested)
-                {
-                    var payload = await client.ReadRtpPacketAsync(cts.Token).ConfigureAwait(false);
-                    if (payload is null) break;
-                    reader.Feed(payload);
-                }
-            }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+            // Use the shared ReadStreamAsync helper so keep-alives fire during the 45-second
+            // collection window — without them the session dies at the device's 30-second
+            // timeout and we get no 8-day schedule data.
+            await FreesatScanner.ReadStreamAsync(client, reader, TimeSpan.FromSeconds(45), ct, _logger)
+                .ConfigureAwait(false);
 
             await client.TeardownAsync(ct).ConfigureAwait(false);
         }
