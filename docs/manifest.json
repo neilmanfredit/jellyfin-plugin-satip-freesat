@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.25.0",
+        "changelog": "debug: add raw file diagnostics bypassing ILogger to confirm OpenAsync execution",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.25/jellyfin-plugin-satip-freesat-v1.9.25-jellyfin12.zip",
+        "checksum": "3a5f01189d953e0cfdb4287e99ad8057",
+        "timestamp": "2026-09-28T20:16:33Z"
+      },
+      {
+        "version": "1.9.25.0",
+        "changelog": "debug: add raw file diagnostics bypassing ILogger to confirm OpenAsync execution",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.25/jellyfin-plugin-satip-freesat-v1.9.25-jellyfin10.zip",
+        "checksum": "324899102da4a11d85be0499aed37a01",
+        "timestamp": "2026-09-28T20:16:33Z"
+      },
+      {
         "version": "1.9.24.0",
         "changelog": "debug: add diagnostic logging to SatIpStreamProxy.OpenAsync",
         "targetAbi": "12.0.0.0",
