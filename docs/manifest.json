@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.19.0",
+        "changelog": "fix: strip DVB control codes from EPG text; add channel logos",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.19/jellyfin-plugin-satip-freesat-v1.9.19-jellyfin12.zip",
+        "checksum": "24ff6c542d316c7a9c341055a8fca2ec",
+        "timestamp": "2026-09-28T16:44:46Z"
+      },
+      {
+        "version": "1.9.19.0",
+        "changelog": "fix: strip DVB control codes from EPG text; add channel logos",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.19/jellyfin-plugin-satip-freesat-v1.9.19-jellyfin10.zip",
+        "checksum": "d77d43a97d8dcad32f3641e49d6a21af",
+        "timestamp": "2026-09-28T16:44:46Z"
+      },
+      {
         "version": "1.9.18.0",
         "changelog": "fix: SatIpTunerHost.IsSupported always true — was excluded from every guide refresh",
         "targetAbi": "12.0.0.0",
