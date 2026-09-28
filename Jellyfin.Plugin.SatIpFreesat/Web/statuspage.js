@@ -113,6 +113,24 @@ export default function (view) {
         view.querySelector('#statusUpdated').textContent = `Updated ${updatedAt}`;
     }
 
+    function renderScanProgress(prog) {
+        const section = view.querySelector('#scanProgressSection');
+        const msgEl = view.querySelector('#scanProgressMsg');
+        const barEl = view.querySelector('#scanProgressBar');
+        if (!section || !msgEl || !barEl) return;
+
+        const scanning = prog?.state === 'scanning';
+        section.style.display = scanning ? '' : 'none';
+        if (!scanning) return;
+
+        msgEl.textContent = prog.message || 'Scanning…';
+        if (prog.percent == null) {
+            barEl.removeAttribute('value'); // indeterminate pulse
+        } else {
+            barEl.value = prog.percent;
+        }
+    }
+
     function loadStatus(showLoading) {
         if (requestInFlight) return requestInFlight;
         const announcer = view.querySelector('#statusAnnouncer');
@@ -128,6 +146,7 @@ export default function (view) {
         ])
             .then(([status, prog]) => {
                 renderStatus(status);
+                renderScanProgress(prog);
                 if (showLoading && announcer) announcer.textContent = 'Status refreshed.';
 
                 // Adjust poll rate: fast while a scan is running, slow otherwise

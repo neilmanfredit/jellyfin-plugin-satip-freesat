@@ -121,6 +121,12 @@
 
             <div id="statusSummary" class="sifSummary" aria-label="Plugin summary"></div>
 
+            <div id="scanProgressSection" style="display:none;margin-bottom:1em;padding:.9em 1.1em;border:1px solid var(--sif-border);border-radius:var(--sif-radius);background:var(--sif-surface)" aria-live="polite">
+                <div style="font-weight:600;margin-bottom:.5em">&#9654; Scan in progress</div>
+                <div id="scanProgressMsg" class="sifMuted" style="font-size:.92em;margin-bottom:.6em">Starting…</div>
+                <progress id="scanProgressBar" style="width:100%;height:.55em;display:block" max="100"></progress>
+            </div>
+
             <details class="sifSection" open>
                 <summary>Device and connection</summary>
                 <div class="sifSectionBody">

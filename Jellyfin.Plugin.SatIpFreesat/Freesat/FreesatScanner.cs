@@ -400,31 +400,45 @@ public sealed class FreesatScanner
             svcIndex.TryAdd(key, svc);
         }
 
-        // Separate Freesat vs Sky bouquets; filter Sky out completely.
-        // Freesat bouquets contain "HD" tier; exclude "G2"/"SD" duplicates.
+        // Keep all non-Sky bouquets (Freesat naming varies — "FreesatHD", "Freesat HD",
+        // "Freesat" etc. — so we don't filter by tier name here; the region-match and
+        // service-level encrypted/type filters below handle quality control).
         var freesatBouquets = bouquets
             .Where(b => !IsSkyBouquet(b.Name))
-            .Where(b => IsHdTier(b.Name))
             .ToList();
+
+        _logger.LogInformation(
+            "SAT>IP: bouquets from BAT: total={Total}, non-Sky={Freesat} names=[{Names}]",
+            bouquets.Count, freesatBouquets.Count,
+            string.Join(", ", freesatBouquets.Select(b => $"'{b.Name}' ({b.Services.Count} svc)")));
 
         // Find bouquets matching the selected region
         var regionMatches = freesatBouquets
             .Where(b => region.Match.Any(m => b.Name.Contains(m, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
-        // Also include the nation-level "Default" bouquet (carries shared national channels)
+        // Also include the nation-level "Default" bouquet (carries shared national channels).
+        // Match on the tier prefix (text before ':') so "FreesatHD: Default" pairs with
+        // "FreesatHD: Granada" but not with a separate "Freesat: Default".
+        var tierPrefixesInRegion = regionMatches.Select(r => TierPrefix(r.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var defaultBouquets = freesatBouquets
             .Where(b => b.Name.Contains("Default", StringComparison.OrdinalIgnoreCase))
-            .Where(b => regionMatches.Any(r => TierPrefix(r.Name) == TierPrefix(b.Name)))
+            .Where(b => tierPrefixesInRegion.Count == 0 || tierPrefixesInRegion.Contains(TierPrefix(b.Name)))
             .ToList();
 
         var activeBouquets = regionMatches.Concat(defaultBouquets).ToList();
+
+        _logger.LogInformation(
+            "SAT>IP: region={Region} → {Rm} region bouquet(s), {Db} default bouquet(s), {Ab} active total; services={Svc}",
+            regionKey, regionMatches.Count, defaultBouquets.Count, activeBouquets.Count, svcIndex.Count);
 
         bool haveLiveBatLcns = activeBouquets.Any(b => b.Services.Count > 0);
 
         if (!haveLiveBatLcns)
         {
-            _logger.LogWarning("SAT>IP: no BAT LCN data in bouquets — falling back to curated LCN table");
+            _logger.LogWarning(
+                "SAT>IP: no BAT LCN data in active bouquets — falling back to curated LCN table (services={Svc})",
+                svcIndex.Count);
             return BuildFromCuratedTable(svcIndex, regionKey);
         }
 
@@ -538,12 +552,6 @@ public sealed class FreesatScanner
 
     private static bool IsSkyBouquet(string name) =>
         SkyPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase));
-
-    private static bool IsHdTier(string name)
-    {
-        var prefix = TierPrefix(name);
-        return prefix.EndsWith("HD", StringComparison.OrdinalIgnoreCase);
-    }
 
     private static string TierPrefix(string name) =>
         name.Contains(':') ? name[..name.IndexOf(':')].Trim() : name.Trim();
