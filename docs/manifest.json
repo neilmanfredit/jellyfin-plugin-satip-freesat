@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.10.0",
+        "changelog": "feat: auto-scan scheduler; fix stream sharing, deinterlace, hidden channels",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.10/jellyfin-plugin-satip-freesat-v1.9.10-jellyfin12.zip",
+        "checksum": "ab20dce902d5089992da42a4009f905e",
+        "timestamp": "2026-09-28T13:47:34Z"
+      },
+      {
+        "version": "1.9.10.0",
+        "changelog": "feat: auto-scan scheduler; fix stream sharing, deinterlace, hidden channels",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.10/jellyfin-plugin-satip-freesat-v1.9.10-jellyfin10.zip",
+        "checksum": "d92ca1ea4655e2a11302f25167d3811d",
+        "timestamp": "2026-09-28T13:47:34Z"
+      },
+      {
         "version": "1.9.9.0",
         "changelog": "fix: EPG keep-alive + Invalidate deletes channel cache file",
         "targetAbi": "12.0.0.0",
