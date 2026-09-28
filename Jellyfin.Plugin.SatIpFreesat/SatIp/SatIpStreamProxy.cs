@@ -16,8 +16,9 @@ namespace Jellyfin.Plugin.SatIpFreesat.SatIp;
 /// SPS+PPS+IDR ("keyframe") boundary arrives. That wait is random (anywhere from instant to
 /// most of a GOP length) and occasionally exceeds the client's patience, producing "Source
 /// error" even though the underlying tuner/signal is fine. By pulling the stream ourselves and
-/// *discarding* data until we see the next keyframe boundary before ffmpeg ever starts reading,
-/// ffmpeg's very first bytes are already a clean decode point, eliminating that wait.
+/// *discarding video packets* until we see the next keyframe boundary before ffmpeg ever starts
+/// reading (PAT/PMT/audio keep flowing throughout), ffmpeg's very first bytes are already a
+/// clean decode point with a complete stream to probe, eliminating that wait.
 /// </summary>
 public sealed class SatIpStreamProxy : IAsyncDisposable
 {
@@ -34,6 +35,7 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     private RtspClient? _client;
     private FileStream? _fileStream;
     private Task? _pumpTask;
+    private bool _videoSynced;
 
     public string FilePath { get; }
 
@@ -64,17 +66,20 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// Discards incoming TS data until a random-access-indicator packet on the video PID is
-    /// seen (i.e. the start of a GOP), then writes that packet onward. Bounded by
-    /// <see cref="SyncTimeout"/> so a mux that never sets the flag can't hang Open() forever —
-    /// if it times out, streaming just starts from whatever arrives next, matching the old
-    /// (pre-proxy) behaviour.
+    /// Waits until a random-access-indicator packet on the video PID is seen (i.e. the start of
+    /// a GOP). While waiting, every packet is still written to the file EXCEPT video-PID packets
+    /// (which would be a partial/undecodable GOP) — PAT/PMT/audio must keep flowing so ffmpeg's
+    /// initial probe sees a complete stream (its hardcoded -map 0:0 -map 0:1 fails outright if
+    /// the audio stream hasn't appeared yet). Bounded by <see cref="SyncTimeout"/> so a mux that
+    /// never sets the flag can't hang Open() forever — if it times out, video packets just start
+    /// flowing unfiltered, matching the old (pre-proxy) behaviour.
     /// </summary>
     private async Task SyncToKeyframeAsync(CancellationToken openCt)
     {
         if (_videoPid is not int videoPid)
         {
             // Unknown video PID (pids=all fallback) — can't target a specific PID's keyframes.
+            _videoSynced = true;
             return;
         }
 
@@ -82,17 +87,13 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
         syncCts.CancelAfter(SyncTimeout);
         try
         {
-            while (true)
+            while (!_videoSynced)
             {
                 var payload = await _client!.ReadRtpPacketAsync(syncCts.Token).ConfigureAwait(false);
                 if (payload is null) return; // stream ended before we ever synced
                 if (payload.Length == 0) continue;
 
-                if (ContainsRandomAccessPoint(payload, videoPid))
-                {
-                    await _fileStream!.WriteAsync(payload, openCt).ConfigureAwait(false);
-                    return;
-                }
+                await WriteFilteredAsync(payload, videoPid, openCt).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (!openCt.IsCancellationRequested)
@@ -100,6 +101,7 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
             _logger.LogInformation(
                 "SAT>IP: no keyframe boundary seen within {Timeout}s — starting stream without pre-sync",
                 SyncTimeout.TotalSeconds);
+            _videoSynced = true;
         }
     }
 
@@ -122,7 +124,14 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
                 if (payload is null) break;
                 if (payload.Length == 0) continue;
 
-                await _fileStream!.WriteAsync(payload, ct).ConfigureAwait(false);
+                if (_videoSynced || _videoPid is not int videoPid)
+                {
+                    await _fileStream!.WriteAsync(payload, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await WriteFilteredAsync(payload, videoPid, ct).ConfigureAwait(false);
+                }
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -132,26 +141,57 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// True if any 188-byte TS packet for <paramref name="targetPid"/> in this RTP payload
-    /// carries adaptation_field.random_access_indicator — the broadcaster-signalled start of a
-    /// GOP/keyframe, per ISO 13818-1.
+    /// Writes every 188-byte TS packet in <paramref name="tsData"/> to the file except
+    /// video-PID packets before the first random-access point, which are dropped. Once a
+    /// random-access point on the video PID is found, <see cref="_videoSynced"/> is set and
+    /// that packet (and everything after it in this payload) is written normally.
     /// </summary>
-    private static bool ContainsRandomAccessPoint(ReadOnlySpan<byte> tsData, int targetPid)
+    private async Task WriteFilteredAsync(byte[] tsData, int videoPid, CancellationToken ct)
     {
+        int runStart = -1;
+
         for (int off = 0; off + 188 <= tsData.Length; off += 188)
         {
-            var pkt = tsData.Slice(off, 188);
-            if (pkt[0] != 0x47) continue;
+            bool isVideoPacket = tsData[off] == 0x47
+                && (((tsData[off + 1] & 0x1F) << 8) | tsData[off + 2]) == videoPid;
 
-            int pid = ((pkt[1] & 0x1F) << 8) | pkt[2];
-            if (pid != targetPid) continue;
+            bool drop = isVideoPacket && !_videoSynced;
 
-            int adaptationFieldControl = (pkt[3] >> 4) & 0x3;
-            if (adaptationFieldControl is 2 or 3 && pkt[4] > 0 && (pkt[5] & 0x40) != 0)
-                return true;
+            if (drop && isVideoPacket && IsRandomAccessPoint(tsData.AsSpan(off, 188)))
+            {
+                _videoSynced = true;
+                drop = false;
+            }
+
+            if (drop)
+            {
+                if (runStart >= 0)
+                {
+                    await _fileStream!.WriteAsync(tsData.AsMemory(runStart, off - runStart), ct).ConfigureAwait(false);
+                    runStart = -1;
+                }
+            }
+            else if (runStart < 0)
+            {
+                runStart = off;
+            }
         }
 
-        return false;
+        if (runStart >= 0)
+        {
+            await _fileStream!.WriteAsync(tsData.AsMemory(runStart, tsData.Length - runStart), ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// True if this single 188-byte TS packet carries adaptation_field.random_access_indicator —
+    /// the broadcaster-signalled start of a GOP/keyframe, per ISO 13818-1. Caller has already
+    /// confirmed the sync byte and PID match.
+    /// </summary>
+    private static bool IsRandomAccessPoint(ReadOnlySpan<byte> pkt)
+    {
+        int adaptationFieldControl = (pkt[3] >> 4) & 0x3;
+        return adaptationFieldControl is 2 or 3 && pkt[4] > 0 && (pkt[5] & 0x40) != 0;
     }
 
     public async Task CloseAsync()
