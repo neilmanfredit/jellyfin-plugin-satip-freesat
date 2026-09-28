@@ -82,12 +82,19 @@ public sealed class RtspClient : IAsyncDisposable
         return _sessionId ?? string.Empty;
     }
 
-    /// <summary>Sends RTSP TEARDOWN and closes the connection.</summary>
+    /// <summary>
+    /// Sends RTSP TEARDOWN. Write-only, like <see cref="SendKeepAliveAsync"/> in TCP mode:
+    /// the device keeps streaming interleaved RTP frames on this socket right up until it
+    /// processes the TEARDOWN, so reading a response here risks the header parser getting
+    /// fed binary RTP data instead of "RTSP/1.0 200 OK\r\n" and hanging waiting for a
+    /// newline that never lands where expected. We're about to dispose the connection
+    /// anyway, so the response isn't needed.
+    /// </summary>
     public async Task TeardownAsync(CancellationToken ct = default)
     {
         if (_controlUrl is not null && _sessionId is not null)
         {
-            try { await SendRequestAsync("TEARDOWN", _controlUrl, null, ct).ConfigureAwait(false); }
+            try { await WriteRequestAsync("TEARDOWN", _controlUrl, null, ct).ConfigureAwait(false); }
             catch { /* best-effort */ }
         }
     }
