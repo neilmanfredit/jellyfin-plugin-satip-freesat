@@ -90,17 +90,16 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// Periodically sends both an RTCP Receiver Report (data-level liveness signal) and an
-    /// RTSP GET_PARAMETER (session-level keep-alive). Controlled A/B testing against this
-    /// tuner showed GET_PARAMETER alone — confirmed sent and acknowledged — was NOT
-    /// sufficient: the pump still stalled ~10-20s after every keep-alive. The tuner instead
-    /// appears to require periodic RTCP Receiver Reports from the client (the RFC
-    /// 3550-standard "receiver is still there" signal), which nothing in this codebase sent
-    /// before now. RTCP is sent FIRST and is fire-and-forget over its own UDP socket —
-    /// GET_PARAMETER's TCP round trip goes second so a tuner that never answers it (bounded
-    /// by RtspClient's own timeout) can't delay or skip the RTCP send. A fixed 5s interval is
-    /// used rather than something derived from the RTSP session timeout, since that timeout
-    /// turned out to be the wrong signal to key off of in the first place.
+    /// Periodically sends both an RTCP Receiver Report and an RTSP OPTIONS (session-level
+    /// keep-alive). The RTSP request is what actually keeps the session alive: this tuner runs
+    /// minisatip, whose 30s per-session stream timeout only resets when it successfully parses
+    /// a *recognized* RTSP method tied to the session — and its parser doesn't recognize
+    /// GET_PARAMETER (see RtspClient.SendKeepAliveAsync for the source-level finding). RTCP
+    /// Receiver Reports are sent too, belt-and-suspenders, since they're the RFC 3550-standard
+    /// liveness signal and cost nothing — but confirmed (via minisatip's own source) to not be
+    /// what this tuner's timeout logic actually consults. RTCP is sent first and is
+    /// fire-and-forget over its own UDP socket, so a slow/non-responding RTSP round trip
+    /// (bounded by RtspClient's own timeout) can't delay or skip it.
     /// </summary>
     private async Task KeepAliveAsync(CancellationToken ct)
     {

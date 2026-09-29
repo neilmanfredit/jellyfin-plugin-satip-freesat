@@ -69,6 +69,20 @@ public sealed class SatIpLiveStream : ILiveStream
             IsRemote = false,
             IsInfiniteStream = true,
             ReadAtNativeFramerate = false,
+            // Without this, EncodingHelper falls back to the server's raw -analyzeduration
+            // default (200M/200s) plus the global -probesize (1G) when it builds ffmpeg's input
+            // modifier — because those are only applied when AnalyzeDurationMs is unset. Against
+            // this tuner that meant ffmpeg's probe phase alone took 3+ minutes before the first
+            // HLS segment appeared, well past Jellyfin's live-stream kill timer and any client's
+            // patience, producing a silent "still connecting" hang even though every layer below
+            // ffmpeg (RTSP session, RTP receive, proxy file) was healthy the whole time. 3000ms
+            // is Jellyfin's own convention for an already-open live source (see
+            // Emby.Server.Implementations/Library/LiveStreamHelper.cs, which sets this exact
+            // value after its internal probe) — safe here because SyncToKeyframeAsync already
+            // guarantees the proxy file begins at a keyframe boundary with PAT/PMT/audio
+            // continuously present, so ffmpeg needs far less data than an arbitrary mid-GOP join
+            // to identify the streams.
+            AnalyzeDurationMs = 3000,
             RequiresOpening = true,
             RequiresClosing = true,
             SupportsProbing = true,
