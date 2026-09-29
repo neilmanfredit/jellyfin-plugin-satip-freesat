@@ -114,6 +114,19 @@ public sealed class SatIpLiveStream : ILiveStream
                     Index = 1,
                     IsDefault = true,
                     Language = "eng",
+                    // Without a declared Channels count, EncodingHelper.GetNumAudioChannelsParam
+                    // (audioStream.Channels is null so its "clamp to input" branch never runs)
+                    // falls back to the client profile's max audio channels for the target codec
+                    // instead of the real source — against a Fire TV profile that meant ffmpeg
+                    // was told to transcode this channel's plain stereo MP2 audio into 8-channel
+                    // AAC. ffmpeg's ADTS muxer only supports up to 7 channels
+                    // (channelConfiguration > 7 is not supported in ADTS), so it failed outright
+                    // (exit code 183) on every single playback attempt on that client, while
+                    // direct-play clients (the web browser) never hit this transcode path at all.
+                    // Freesat's SD/HD channels are overwhelmingly plain stereo MP2/AAC; this is a
+                    // best-effort default, not a probe of the actual per-channel PMT audio
+                    // descriptor.
+                    Channels = 2,
                 },
             ],
         };
