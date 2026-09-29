@@ -118,7 +118,13 @@ public sealed class SatIpLiveStream : ILiveStream
         // avoid this by routing playback through Jellyfin's own /LiveTv/LiveStreamFiles HTTP
         // endpoint, which wraps GetStream()'s result in a ProgressiveFileStream that knows how
         // to wait for growth. Mirror that here rather than exposing the raw file path.
-        MediaSource.Path = _appHost.GetApiUrlForLocalAccess(null, true) + "/LiveTv/LiveStreamFiles/" + UniqueId + "/stream.ts";
+        //
+        // allowHttps: false is deliberate — GetApiUrlForLocalAccess builds the URL from this
+        // server's LAN IP, but this server's TLS cert only covers its hostname (*.domain),
+        // not the bare IP, so ffmpeg's TLS handshake rejects it outright ("no alternative
+        // certificate subject name matches target IP"). This request never leaves the host, so
+        // plain HTTP is fine.
+        MediaSource.Path = _appHost.GetApiUrlForLocalAccess(null, false) + "/LiveTv/LiveStreamFiles/" + UniqueId + "/stream.ts";
         MediaSource.Protocol = MediaProtocol.Http;
     }
     public Task Close() => _proxy.CloseAsync();
