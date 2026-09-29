@@ -139,7 +139,19 @@ public sealed class RtspClient : IAsyncDisposable
             : ReadRtpPacketTcpAsync(ct);
 
     /// <summary>
-    /// Sends a GET_PARAMETER keep-alive over the RTSP TCP channel.
+    /// Sends an OPTIONS keep-alive over the RTSP TCP channel — NOT GET_PARAMETER, even
+    /// though that's the RTSP/SAT>IP-spec-typical choice. This tuner runs minisatip, whose
+    /// request parser (is_rtsp_request in utils.cpp) only recognises OPTIONS/DESCRIBE/
+    /// SETUP/PLAY/TEARDOWN as valid RTSP methods — GET_PARAMETER isn't in that list, so
+    /// minisatip never even parses it as a complete request (logs "RTSP header not
+    /// complete" forever) and never replies. Confirmed via minisatip's own log
+    /// (/home/root/minisatip.log on the tuner, root@192.168.1.100) that this is *why* the
+    /// per-session 30s stream timeout (stream.cpp: sid->rtime vs sid->timeout) always fired
+    /// regardless of keep-alive strategy: sid->rtime only advances when a *recognised* RTSP
+    /// request tied to the session is parsed (minisatip.cpp read_rtsp, unconditional on
+    /// method) — never from RTCP Receiver Reports, which minisatip's timeout logic doesn't
+    /// consult at all. OPTIONS is recognised and side-effect-free, so it satisfies that
+    /// requirement without disturbing playback state.
     /// In UDP mode this is safe to send-and-read because data arrives on a separate socket.
     /// In TCP interleaved mode we only WRITE the request — the main RTP read loop already
     /// consumes the RTSP response via SkipRtspResponseAsync, so reading here would race
@@ -152,23 +164,17 @@ public sealed class RtspClient : IAsyncDisposable
         {
             if (_udpReceiver is not null)
             {
-                // UDP mode: RTP data arrives on a separate socket, so reading the RTSP
-                // response here is safe — PROVIDED the tuner actually replies. Testing
-                // against this tuner showed it never answers GET_PARAMETER while in UDP
-                // transport mode, and SendRequestAsync has no timeout of its own, so this
-                // call hung forever on the very first keep-alive — silently wedging the
-                // whole keep-alive loop (including the RTCP Receiver Report send queued
-                // after it) for the rest of the session. Bound it so a non-responding
-                // tuner can never block anything past a single failed attempt.
+                // Bounded so a tuner that never replies (e.g. some other unrecognised
+                // method were sent) can't hang the keep-alive loop indefinitely.
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 timeoutCts.CancelAfter(TimeSpan.FromSeconds(3));
-                await SendRequestAsync("GET_PARAMETER", _controlUrl, null, timeoutCts.Token).ConfigureAwait(false);
+                await SendRequestAsync("OPTIONS", _controlUrl, null, timeoutCts.Token).ConfigureAwait(false);
             }
             else
             {
                 // TCP interleaved: only write the request. The main RTP read loop will
                 // receive and discard the RTSP response via SkipRtspResponseAsync.
-                await WriteRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false);
+                await WriteRequestAsync("OPTIONS", _controlUrl, null, ct).ConfigureAwait(false);
             }
 
             _logger.LogInformation("SAT>IP RTSP: keep-alive sent (session={Session})", _sessionId);
