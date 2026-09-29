@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.35.0",
+        "changelog": "fix: set AnalyzeDurationMs=3000 to stop ffmpeg's minutes-long probe",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.35/jellyfin-plugin-satip-freesat-v1.9.35-jellyfin12.zip",
+        "checksum": "09d56a28b5ae0c7ee65eb02be9be9227",
+        "timestamp": "2026-09-29T11:13:13Z"
+      },
+      {
+        "version": "1.9.35.0",
+        "changelog": "fix: set AnalyzeDurationMs=3000 to stop ffmpeg's minutes-long probe",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.35/jellyfin-plugin-satip-freesat-v1.9.35-jellyfin10.zip",
+        "checksum": "b8d68cfd8c552f5da90bc0b9cb04e10a",
+        "timestamp": "2026-09-29T11:13:13Z"
+      },
+      {
         "version": "1.9.34.0",
         "changelog": "fix: send RTSP OPTIONS for keep-alive, not GET_PARAMETER",
         "targetAbi": "12.0.0.0",
