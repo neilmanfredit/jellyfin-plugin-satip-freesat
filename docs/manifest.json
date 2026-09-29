@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.36.0",
+        "changelog": "fix: collect EIT once per mux instead of once per channel",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.36/jellyfin-plugin-satip-freesat-v1.9.36-jellyfin12.zip",
+        "checksum": "8bbe4e4584a2f398c1063ced998e2d7f",
+        "timestamp": "2026-09-29T11:23:56Z"
+      },
+      {
+        "version": "1.9.36.0",
+        "changelog": "fix: collect EIT once per mux instead of once per channel",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.36/jellyfin-plugin-satip-freesat-v1.9.36-jellyfin10.zip",
+        "checksum": "e8bdc2e8dc9b62a1efed258c8b52614d",
+        "timestamp": "2026-09-29T11:23:56Z"
+      },
+      {
         "version": "1.9.35.0",
         "changelog": "fix: set AnalyzeDurationMs=3000 to stop ffmpeg's minutes-long probe",
         "targetAbi": "12.0.0.0",
