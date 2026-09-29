@@ -64,6 +64,19 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
         _opened = true;
 
         _client = new RtspClient(_host, _port, _logger);
+
+        // Live playback keeps this RTSP session open for as long as the user watches, which
+        // means SendKeepAliveAsync has to run periodically for the whole duration (see
+        // KeepAliveAsync below) — unlike the short-lived TCP-interleaved sessions used
+        // elsewhere (e.g. FreesatScanner), which usually finish before a keep-alive is ever
+        // due. In TCP interleaved mode, RTP data and RTSP control messages share one socket,
+        // so the keep-alive's GET_PARAMETER response has to be spliced in between RTP frames
+        // by the tuner — and testing showed the pump reliably stalling within ~10-20s of a
+        // keep-alive being sent, consistent with that splice desyncing the interleaved framing
+        // parser. UDP unicast avoids the shared socket entirely: RTP arrives on its own socket,
+        // so the keep-alive can safely do a full request/response round trip on the RTSP TCP
+        // control channel without any risk of colliding with the data stream.
+        _client.EnableUdpTransport();
         await _client.ConnectAsync(openCt).ConfigureAwait(false);
         await _client.SetupAndPlayAsync(_muxParams, _pids, openCt).ConfigureAwait(false);
 
