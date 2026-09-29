@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.28.0",
+        "changelog": "fix: use plain HTTP for LiveStreamFiles URL, not HTTPS",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.28/jellyfin-plugin-satip-freesat-v1.9.28-jellyfin12.zip",
+        "checksum": "e5e9dd42f831d54750e16569fd8497f5",
+        "timestamp": "2026-09-29T09:10:41Z"
+      },
+      {
+        "version": "1.9.28.0",
+        "changelog": "fix: use plain HTTP for LiveStreamFiles URL, not HTTPS",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.28/jellyfin-plugin-satip-freesat-v1.9.28-jellyfin10.zip",
+        "checksum": "ac0b6ee5203d0c912942944850814b4e",
+        "timestamp": "2026-09-29T09:10:41Z"
+      },
+      {
         "version": "1.9.27.0",
         "changelog": "fix: stream live TV via Jellyfin's LiveStreamFiles HTTP endpoint, not a raw file path",
         "targetAbi": "12.0.0.0",
