@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.37.0",
+        "changelog": "fix: collect EIT in background with 4min/mux dwell for full multi-day guide",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.37/jellyfin-plugin-satip-freesat-v1.9.37-jellyfin12.zip",
+        "checksum": "018381fba582ef0afdcab148f1ff580a",
+        "timestamp": "2026-09-29T12:52:13Z"
+      },
+      {
+        "version": "1.9.37.0",
+        "changelog": "fix: collect EIT in background with 4min/mux dwell for full multi-day guide",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.37/jellyfin-plugin-satip-freesat-v1.9.37-jellyfin10.zip",
+        "checksum": "7ae7633cb734d96194a4c0cab9915446",
+        "timestamp": "2026-09-29T12:52:13Z"
+      },
+      {
         "version": "1.9.36.0",
         "changelog": "fix: collect EIT once per mux instead of once per channel",
         "targetAbi": "12.0.0.0",
