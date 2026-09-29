@@ -86,7 +86,11 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     /// </summary>
     private async Task KeepAliveAsync(CancellationToken ct)
     {
-        var interval = TimeSpan.FromSeconds(Math.Max(5, _client!.SessionTimeout.TotalSeconds / 2));
+        // Fixed 15s safety margin before the advertised timeout, rather than a fraction of it —
+        // a 30s timeout with a /2 margin only gave ~15s of slack for the very first keep-alive
+        // to land, which observed testing showed wasn't reliably enough once SyncToKeyframeAsync
+        // and scheduling jitter ate into it.
+        var interval = TimeSpan.FromSeconds(Math.Max(5, _client!.SessionTimeout.TotalSeconds - 15));
         try
         {
             while (!ct.IsCancellationRequested)

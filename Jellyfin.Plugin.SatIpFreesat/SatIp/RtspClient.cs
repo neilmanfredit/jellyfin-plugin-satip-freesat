@@ -133,8 +133,13 @@ public sealed class RtspClient : IAsyncDisposable
                 // receive and discard the RTSP response via SkipRtspResponseAsync.
                 await WriteRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false);
             }
+
+            _logger.LogInformation("SAT>IP RTSP: keep-alive sent (session={Session})", _sessionId);
         }
-        catch { /* best-effort; stream-read loop will detect closure */ }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SAT>IP RTSP: keep-alive send failed (session={Session})", _sessionId);
+        }
     }
 
     // ---- private: transport ----
