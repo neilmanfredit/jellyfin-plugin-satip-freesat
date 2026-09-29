@@ -71,6 +71,18 @@ public sealed class RtspClient : IAsyncDisposable
             try
             {
                 _udpReceiver = new UdpClient(port);
+                // Default OS receive buffer (often 128-212KB on Linux) can overflow silently
+                // during bursty traffic — e.g. a large multi-packet EIT "schedule" section
+                // arriving as a tight burst of several ~1316-byte RTP-TS datagrams back to
+                // back. A dropped datagram mid-section leaves TsReader's accumulator short of
+                // TotalLength forever (see TsReader.ProcessPacket) — the next unrelated
+                // section start (present/following, which repeats far more often than
+                // schedule) then resets and silently discards the incomplete section. This
+                // was confirmed as the dominant reason background EIT collection captured
+                // present/following events reliably but almost no multi-day schedule data
+                // even across a 4-minute dwell per mux. 1MB gives the receive loop much more
+                // slack to drain bursts without OS-level drops.
+                _udpReceiver.Client.ReceiveBufferSize = 1024 * 1024;
                 _udpRtcp = new UdpClient(port + 1);
                 break;
             }

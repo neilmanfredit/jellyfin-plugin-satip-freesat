@@ -148,7 +148,33 @@ public sealed class TsReader
 
     private void EmitSection(int pid, SectionState state)
     {
-        SectionReady?.Invoke(pid, state.Buffer.ToArray());
+        // Guards against corrupted sections slipping through — e.g. a dropped UDP datagram
+        // mid-section could, in principle, leave the accumulator exactly TotalLength bytes
+        // but with a chunk of unrelated data spliced in. No RTP-loss detection exists upstream
+        // (see RtspClient), so this CRC32 check is the only integrity guarantee before a
+        // section's contents (title, synopsis, start/end dates) reach the program guide.
+        var buffer = state.Buffer;
+        if (buffer.Length < 4 || !IsCrc32Valid(buffer)) return;
+
+        SectionReady?.Invoke(pid, buffer.ToArray());
+    }
+
+    // DVB SI sections are terminated with a standard MPEG-2 CRC32 (poly 0x04C11DB7, no
+    // reflection, init 0xFFFFFFFF, no final XOR) covering every byte except the CRC itself.
+    private static bool IsCrc32Valid(ReadOnlySpan<byte> section)
+    {
+        uint crc = 0xFFFFFFFF;
+        var data = section[..^4];
+        foreach (byte b in data)
+        {
+            crc ^= (uint)b << 24;
+            for (int i = 0; i < 8; i++)
+                crc = (crc & 0x80000000) != 0 ? (crc << 1) ^ 0x04C11DB7 : crc << 1;
+        }
+
+        uint expected = ((uint)section[^4] << 24) | ((uint)section[^3] << 16)
+            | ((uint)section[^2] << 8) | section[^1];
+        return crc == expected;
     }
 
     private sealed class SectionState
