@@ -35,6 +35,7 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     private RtspClient? _client;
     private FileStream? _fileStream;
     private Task? _pumpTask;
+    private Task? _keepAliveTask;
     private bool _videoSynced;
     private bool _opened;
 
@@ -72,6 +73,31 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
         await SyncToKeyframeAsync(openCt).ConfigureAwait(false);
 
         _pumpTask = Task.Run(() => PumpAsync(_lifetimeCts.Token));
+        _keepAliveTask = Task.Run(() => KeepAliveAsync(_lifetimeCts.Token));
+    }
+
+    /// <summary>
+    /// Periodically sends an RTSP GET_PARAMETER on the tuner's session so it doesn't expire
+    /// mid-stream. The tuner's SETUP response advertises a session timeout (observed as low as
+    /// 30s on some devices) and tears the session down — silently stopping RTP delivery, with
+    /// no error surfaced here — if it goes that long without any request on the session. Nothing
+    /// else touches the RTSP control channel once PLAY has been sent, so without this the pump
+    /// loop just stalls forever partway through playback.
+    /// </summary>
+    private async Task KeepAliveAsync(CancellationToken ct)
+    {
+        var interval = TimeSpan.FromSeconds(Math.Max(5, _client!.SessionTimeout.TotalSeconds / 2));
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(interval, ct).ConfigureAwait(false);
+                await _client.SendKeepAliveAsync(ct).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     /// <summary>
@@ -209,6 +235,12 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
         if (_pumpTask is not null)
         {
             try { await _pumpTask.ConfigureAwait(false); }
+            catch { /* best-effort */ }
+        }
+
+        if (_keepAliveTask is not null)
+        {
+            try { await _keepAliveTask.ConfigureAwait(false); }
             catch { /* best-effort */ }
         }
 
