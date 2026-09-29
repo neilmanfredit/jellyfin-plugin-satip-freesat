@@ -90,26 +90,25 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// Periodically sends an RTSP GET_PARAMETER on the tuner's session so it doesn't expire
-    /// mid-stream. The tuner's SETUP response advertises a session timeout (observed as low as
-    /// 30s on some devices) and tears the session down — silently stopping RTP delivery, with
-    /// no error surfaced here — if it goes that long without any request on the session. Nothing
-    /// else touches the RTSP control channel once PLAY has been sent, so without this the pump
-    /// loop just stalls forever partway through playback.
+    /// Periodically sends both an RTSP GET_PARAMETER (session-level keep-alive) and an RTCP
+    /// Receiver Report (data-level liveness signal). Controlled A/B testing against this tuner
+    /// showed GET_PARAMETER alone — confirmed sent and acknowledged — was NOT sufficient: the
+    /// pump still stalled ~10-20s after every keep-alive. The tuner instead appears to require
+    /// periodic RTCP Receiver Reports from the client (the RFC 3550-standard "receiver is still
+    /// there" signal), which nothing in this codebase sent before now. A fixed 5s interval is
+    /// used rather than something derived from the RTSP session timeout, since that timeout
+    /// turned out to be the wrong signal to key off of in the first place.
     /// </summary>
     private async Task KeepAliveAsync(CancellationToken ct)
     {
-        // Fixed 15s safety margin before the advertised timeout, rather than a fraction of it —
-        // a 30s timeout with a /2 margin only gave ~15s of slack for the very first keep-alive
-        // to land, which observed testing showed wasn't reliably enough once SyncToKeyframeAsync
-        // and scheduling jitter ate into it.
-        var interval = TimeSpan.FromSeconds(Math.Max(5, _client!.SessionTimeout.TotalSeconds - 15));
+        var interval = TimeSpan.FromSeconds(5);
         try
         {
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(interval, ct).ConfigureAwait(false);
-                await _client.SendKeepAliveAsync(ct).ConfigureAwait(false);
+                await _client!.SendKeepAliveAsync(ct).ConfigureAwait(false);
+                await _client.SendRtcpReceiverReportAsync(ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)

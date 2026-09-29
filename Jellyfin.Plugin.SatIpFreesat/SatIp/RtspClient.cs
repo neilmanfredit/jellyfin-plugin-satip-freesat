@@ -24,6 +24,9 @@ public sealed class RtspClient : IAsyncDisposable
     private TcpClient? _tcp;
     private NetworkStream? _stream;
     private UdpClient? _udpReceiver;
+    private UdpClient? _udpRtcp;
+    private IPEndPoint? _serverRtcpEndpoint;
+    private readonly uint _rtcpSsrc = (uint)Random.Shared.Next();
     private int _cseq;
     private string? _sessionId;
     private string? _controlUrl;
@@ -56,9 +59,35 @@ public sealed class RtspClient : IAsyncDisposable
     public void EnableUdpTransport()
     {
         _udpReceiver?.Dispose();
-        _udpReceiver = new UdpClient(0); // bind to OS-assigned local port
+        _udpRtcp?.Dispose();
+
+        // RTP/RTCP are conventionally a contiguous even/odd port pair, and we need a real,
+        // bound RTCP socket (not just the RTP one) to send Receiver Reports from — several
+        // SAT>IP tuners (this one included, confirmed by direct testing) silently tear down
+        // the stream ~30s in without them, regardless of RTSP-level GET_PARAMETER keep-alives.
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            int port = Random.Shared.Next(20000, 60000) & ~1;
+            try
+            {
+                _udpReceiver = new UdpClient(port);
+                _udpRtcp = new UdpClient(port + 1);
+                break;
+            }
+            catch (SocketException)
+            {
+                _udpReceiver?.Dispose();
+                _udpRtcp?.Dispose();
+                _udpReceiver = null;
+                _udpRtcp = null;
+            }
+        }
+
+        if (_udpReceiver is null || _udpRtcp is null)
+            throw new InvalidOperationException("Could not bind a local UDP RTP/RTCP port pair");
+
         var localPort = ((IPEndPoint)_udpReceiver.Client.LocalEndPoint!).Port;
-        _logger.LogInformation("SAT>IP: UDP transport enabled, local port {Port}", localPort);
+        _logger.LogInformation("SAT>IP: UDP transport enabled, local ports {Rtp}/{Rtcp}", localPort, localPort + 1);
     }
 
     /// <summary>
@@ -140,6 +169,72 @@ public sealed class RtspClient : IAsyncDisposable
         {
             _logger.LogWarning(ex, "SAT>IP RTSP: keep-alive send failed (session={Session})", _sessionId);
         }
+    }
+
+    /// <summary>
+    /// Sends an RTCP Receiver Report (+ SDES CNAME, per RFC 3550's compound-packet
+    /// requirement) to the tuner's RTCP port. Several SAT>IP tuners use this — not the RTSP
+    /// session's GET_PARAMETER keep-alive — as the actual "is the client still there" signal
+    /// for unicast streams, and silently stop sending RTP a fixed interval after the last one
+    /// they saw. No-op outside UDP mode (TCP interleaved has no separate RTCP channel we can
+    /// address independently of the RTP data itself).
+    /// </summary>
+    public async Task SendRtcpReceiverReportAsync(CancellationToken ct)
+    {
+        if (_udpRtcp is null || _serverRtcpEndpoint is null) return;
+        try
+        {
+            var packet = BuildRtcpReceiverReport(_rtcpSsrc);
+            await _udpRtcp.SendAsync(packet, _serverRtcpEndpoint, ct).ConfigureAwait(false);
+        }
+        catch { /* best-effort; pump loop will detect closure */ }
+    }
+
+    private static byte[] BuildRtcpReceiverReport(uint ssrc)
+    {
+        var cname = Encoding.UTF8.GetBytes("jellyfin-satip");
+
+        // SDES chunk: SSRC(4) + CNAME item [type(1) len(1) text(n)] + null terminator(1),
+        // padded to a 4-byte boundary as required by RFC 3550.
+        int chunkLen = 4 + 2 + cname.Length + 1;
+        int chunkPad = (4 - (chunkLen % 4)) % 4;
+        var sdesChunk = new byte[chunkLen + chunkPad];
+        WriteUInt32BE(sdesChunk, 0, ssrc);
+        sdesChunk[4] = 1; // CNAME
+        sdesChunk[5] = (byte)cname.Length;
+        Array.Copy(cname, 0, sdesChunk, 6, cname.Length);
+        // remaining bytes already zero (terminator + padding)
+
+        var packet = new byte[8 + 4 + sdesChunk.Length];
+
+        // RR: V=2,P=0,RC=0; PT=201; length=1 (2 words: header+SSRC); SSRC.
+        packet[0] = 0x80;
+        packet[1] = 201;
+        WriteUInt16BE(packet, 2, 1);
+        WriteUInt32BE(packet, 4, ssrc);
+
+        // SDES: V=2,P=0,SC=1; PT=202; length in words.
+        int sdesOffset = 8;
+        packet[sdesOffset] = 0x81;
+        packet[sdesOffset + 1] = 202;
+        WriteUInt16BE(packet, sdesOffset + 2, (ushort)((sdesChunk.Length / 4)));
+        Array.Copy(sdesChunk, 0, packet, sdesOffset + 4, sdesChunk.Length);
+
+        return packet;
+    }
+
+    private static void WriteUInt16BE(byte[] buf, int offset, ushort value)
+    {
+        buf[offset] = (byte)(value >> 8);
+        buf[offset + 1] = (byte)value;
+    }
+
+    private static void WriteUInt32BE(byte[] buf, int offset, uint value)
+    {
+        buf[offset] = (byte)(value >> 24);
+        buf[offset + 1] = (byte)(value >> 16);
+        buf[offset + 2] = (byte)(value >> 8);
+        buf[offset + 3] = (byte)value;
     }
 
     // ---- private: transport ----
@@ -286,6 +381,16 @@ public sealed class RtspClient : IAsyncDisposable
         _logger.LogInformation(
             "SAT>IP RTSP SETUP: status={Code} session={Session} timeout={Timeout}s transport={Transport}",
             response.StatusCode, _sessionId ?? "(none)", (int)SessionTimeout.TotalSeconds, transport ?? "(none)");
+
+        // Pull the tuner's RTCP port out of "...;server_port=5500-5501" so we know where to
+        // send our Receiver Reports. Reuses the already-resolved TCP remote address rather
+        // than re-resolving _host, in case it's a hostname.
+        if (_udpRtcp is not null && transport is not null && _tcp?.Client.RemoteEndPoint is IPEndPoint remoteEp)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(transport, @"server_port=\d+-(\d+)");
+            if (m.Success && int.TryParse(m.Groups[1].Value, out var rtcpPort))
+                _serverRtcpEndpoint = new IPEndPoint(remoteEp.Address, rtcpPort);
+        }
     }
 
     private async Task PlayAsync(CancellationToken ct)
@@ -484,6 +589,7 @@ public sealed class RtspClient : IAsyncDisposable
         if (_stream is not null) await _stream.DisposeAsync().ConfigureAwait(false);
         _tcp?.Dispose();
         _udpReceiver?.Dispose();
+        _udpRtcp?.Dispose();
     }
 
     private sealed record RtspResponse(int StatusCode, Dictionary<string, string> Headers, string Body);
