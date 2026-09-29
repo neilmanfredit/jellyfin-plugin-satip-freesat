@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.30.0",
+        "changelog": "diag: log keep-alive send success/failure; widen safety margin",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.30/jellyfin-plugin-satip-freesat-v1.9.30-jellyfin12.zip",
+        "checksum": "0d5d98671785a6ab35f624c6941610df",
+        "timestamp": "2026-09-29T10:00:05Z"
+      },
+      {
+        "version": "1.9.30.0",
+        "changelog": "diag: log keep-alive send success/failure; widen safety margin",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.30/jellyfin-plugin-satip-freesat-v1.9.30-jellyfin10.zip",
+        "checksum": "8add7f96181ed27339b90b57d75059bf",
+        "timestamp": "2026-09-29T10:00:05Z"
+      },
+      {
         "version": "1.9.29.0",
         "changelog": "fix: send periodic RTSP keep-alive during live playback",
         "targetAbi": "12.0.0.0",
