@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.38.0",
+        "changelog": "fix: declare audio Channels=2 to stop invalid 8-channel AAC transcode",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.38/jellyfin-plugin-satip-freesat-v1.9.38-jellyfin12.zip",
+        "checksum": "99714a6c3b60728c938e307ff48e15ac",
+        "timestamp": "2026-09-29T12:56:16Z"
+      },
+      {
+        "version": "1.9.38.0",
+        "changelog": "fix: declare audio Channels=2 to stop invalid 8-channel AAC transcode",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.38/jellyfin-plugin-satip-freesat-v1.9.38-jellyfin10.zip",
+        "checksum": "56eef6119cc1144e84f60dcf523d91a5",
+        "timestamp": "2026-09-29T12:56:16Z"
+      },
+      {
         "version": "1.9.37.0",
         "changelog": "fix: collect EIT in background with 4min/mux dwell for full multi-day guide",
         "targetAbi": "12.0.0.0",
