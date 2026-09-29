@@ -417,9 +417,9 @@ public sealed class FreesatScanner
         RtspClient client, TsReader reader, TimeSpan timeout, CancellationToken ct,
         ILogger? logger = null)
     {
-        // Send periodic GET_PARAMETER keep-alives so the device doesn't time out the session.
-        // Interval = half the negotiated timeout (floor 1 s). The keep-alive response arrives
-        // as a plain RTSP message on the same TCP channel; ReadRtpPacketAsync skips it safely.
+        // Send periodic RTSP keep-alives so the device doesn't time out the session. Interval =
+        // half the negotiated timeout (floor 1 s). The keep-alive response arrives as a plain
+        // RTSP message on the same TCP channel; ReadRtpPacketAsync skips it safely.
         var keepAliveInterval = TimeSpan.FromSeconds(
             Math.Max(client.SessionTimeout.TotalSeconds / 2.0, 1.0));
 
