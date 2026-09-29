@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.Freesat;
+using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.Dto;
@@ -19,6 +20,7 @@ public sealed class SatIpTunerHost : ITunerHost
 {
     private readonly ILogger<SatIpTunerHost> _logger;
     private readonly FreesatChannelStore _store;
+    private readonly IServerApplicationHost _appHost;
 
     public string Name => "SAT>IP Freesat";
     public string Type => "satip-freesat";
@@ -32,10 +34,11 @@ public sealed class SatIpTunerHost : ITunerHost
     // when unconfigured, so there's nothing to gain by being conditionally supported.
     public bool IsSupported => true;
 
-    public SatIpTunerHost(ILogger<SatIpTunerHost> logger, FreesatChannelStore store)
+    public SatIpTunerHost(ILogger<SatIpTunerHost> logger, FreesatChannelStore store, IServerApplicationHost appHost)
     {
         _logger = logger;
         _store = store;
+        _appHost = appHost;
     }
 
     public Task<List<ChannelInfo>> GetChannels(bool enableCache, CancellationToken ct)
@@ -132,6 +135,6 @@ public sealed class SatIpTunerHost : ITunerHost
         var tuner = tuners.FirstOrDefault(t => !usedFrontends.Contains(t.FrontendNumber))
                     ?? tuners[0];
 
-        return new SatIpLiveStream(channel, cfg.ServerAddress, tuner, cfg, _logger);
+        return new SatIpLiveStream(channel, cfg.ServerAddress, tuner, cfg, _logger, _appHost);
     }
 }

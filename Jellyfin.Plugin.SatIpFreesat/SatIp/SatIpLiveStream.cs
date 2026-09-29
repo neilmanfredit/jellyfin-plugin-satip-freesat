@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.Configuration;
 using Jellyfin.Plugin.SatIpFreesat.Freesat;
+using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
@@ -34,11 +35,13 @@ public sealed class SatIpLiveStream : ILiveStream
     public int FrontendNumber { get; }
 
     private readonly SatIpStreamProxy _proxy;
+    private readonly IServerApplicationHost _appHost;
 
     public SatIpLiveStream(
         FreesatChannel channel, string serverAddress, TunerEntry tuner,
-        Configuration.PluginConfiguration cfg, ILogger logger)
+        Configuration.PluginConfiguration cfg, ILogger logger, IServerApplicationHost appHost)
     {
+        _appHost = appHost;
         FrontendNumber = tuner.FrontendNumber;
         OriginalStreamId = channel.ChannelId;
         TunerHostId = "satip-freesat";
@@ -102,9 +105,22 @@ public sealed class SatIpLiveStream : ILiveStream
         };
     }
 
-    public Stream GetStream() => Stream.Null;
+    public Stream GetStream() => new FileStream(
+        _proxy.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
+        FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-    public Task Open(CancellationToken ct) => _proxy.OpenAsync(ct);
+    public async Task Open(CancellationToken ct)
+    {
+        await _proxy.OpenAsync(ct).ConfigureAwait(false);
+
+        // ffmpeg's file: protocol treats a growing local file as finite and exits cleanly on
+        // EOF instead of polling for new bytes. Jellyfin's own tuner hosts (HdHomerun, M3U)
+        // avoid this by routing playback through Jellyfin's own /LiveTv/LiveStreamFiles HTTP
+        // endpoint, which wraps GetStream()'s result in a ProgressiveFileStream that knows how
+        // to wait for growth. Mirror that here rather than exposing the raw file path.
+        MediaSource.Path = _appHost.GetApiUrlForLocalAccess(null, true) + "/LiveTv/LiveStreamFiles/" + UniqueId + "/stream.ts";
+        MediaSource.Protocol = MediaProtocol.Http;
+    }
     public Task Close() => _proxy.CloseAsync();
     public void Dispose() { }
 
