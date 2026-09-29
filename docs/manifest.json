@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.39.0",
+        "changelog": "fix: validate EIT section CRC32, enlarge UDP receive buffer to stop schedule data loss",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.39/jellyfin-plugin-satip-freesat-v1.9.39-jellyfin12.zip",
+        "checksum": "25b42576e478c353097004724712c95e",
+        "timestamp": "2026-09-29T16:52:29Z"
+      },
+      {
+        "version": "1.9.39.0",
+        "changelog": "fix: validate EIT section CRC32, enlarge UDP receive buffer to stop schedule data loss",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.39/jellyfin-plugin-satip-freesat-v1.9.39-jellyfin10.zip",
+        "checksum": "5450d8790c9efcc19ef36ec28cc55d1d",
+        "timestamp": "2026-09-29T16:52:29Z"
+      },
+      {
         "version": "1.9.38.0",
         "changelog": "fix: declare audio Channels=2 to stop invalid 8-channel AAC transcode",
         "targetAbi": "12.0.0.0",
