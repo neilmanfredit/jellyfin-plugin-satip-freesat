@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.31.0",
+        "changelog": "fix: use UDP unicast transport for live playback, not TCP interleaved",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.31/jellyfin-plugin-satip-freesat-v1.9.31-jellyfin12.zip",
+        "checksum": "9150b9fe46f6243a9a29cba478b448db",
+        "timestamp": "2026-09-29T10:14:18Z"
+      },
+      {
+        "version": "1.9.31.0",
+        "changelog": "fix: use UDP unicast transport for live playback, not TCP interleaved",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.31/jellyfin-plugin-satip-freesat-v1.9.31-jellyfin10.zip",
+        "checksum": "220e05fc1286b18d8f9eb4c6e3097e10",
+        "timestamp": "2026-09-29T10:14:18Z"
+      },
+      {
         "version": "1.9.30.0",
         "changelog": "diag: log keep-alive send success/failure; widen safety margin",
         "targetAbi": "12.0.0.0",
