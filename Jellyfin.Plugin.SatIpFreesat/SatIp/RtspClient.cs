@@ -153,8 +153,16 @@ public sealed class RtspClient : IAsyncDisposable
             if (_udpReceiver is not null)
             {
                 // UDP mode: RTP data arrives on a separate socket, so reading the RTSP
-                // response here is safe.
-                await SendRequestAsync("GET_PARAMETER", _controlUrl, null, ct).ConfigureAwait(false);
+                // response here is safe — PROVIDED the tuner actually replies. Testing
+                // against this tuner showed it never answers GET_PARAMETER while in UDP
+                // transport mode, and SendRequestAsync has no timeout of its own, so this
+                // call hung forever on the very first keep-alive — silently wedging the
+                // whole keep-alive loop (including the RTCP Receiver Report send queued
+                // after it) for the rest of the session. Bound it so a non-responding
+                // tuner can never block anything past a single failed attempt.
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(TimeSpan.FromSeconds(3));
+                await SendRequestAsync("GET_PARAMETER", _controlUrl, null, timeoutCts.Token).ConfigureAwait(false);
             }
             else
             {

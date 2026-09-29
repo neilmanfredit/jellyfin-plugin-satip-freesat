@@ -90,12 +90,15 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// Periodically sends both an RTSP GET_PARAMETER (session-level keep-alive) and an RTCP
-    /// Receiver Report (data-level liveness signal). Controlled A/B testing against this tuner
-    /// showed GET_PARAMETER alone — confirmed sent and acknowledged — was NOT sufficient: the
-    /// pump still stalled ~10-20s after every keep-alive. The tuner instead appears to require
-    /// periodic RTCP Receiver Reports from the client (the RFC 3550-standard "receiver is still
-    /// there" signal), which nothing in this codebase sent before now. A fixed 5s interval is
+    /// Periodically sends both an RTCP Receiver Report (data-level liveness signal) and an
+    /// RTSP GET_PARAMETER (session-level keep-alive). Controlled A/B testing against this
+    /// tuner showed GET_PARAMETER alone — confirmed sent and acknowledged — was NOT
+    /// sufficient: the pump still stalled ~10-20s after every keep-alive. The tuner instead
+    /// appears to require periodic RTCP Receiver Reports from the client (the RFC
+    /// 3550-standard "receiver is still there" signal), which nothing in this codebase sent
+    /// before now. RTCP is sent FIRST and is fire-and-forget over its own UDP socket —
+    /// GET_PARAMETER's TCP round trip goes second so a tuner that never answers it (bounded
+    /// by RtspClient's own timeout) can't delay or skip the RTCP send. A fixed 5s interval is
     /// used rather than something derived from the RTSP session timeout, since that timeout
     /// turned out to be the wrong signal to key off of in the first place.
     /// </summary>
@@ -107,8 +110,8 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(interval, ct).ConfigureAwait(false);
-                await _client!.SendKeepAliveAsync(ct).ConfigureAwait(false);
-                await _client.SendRtcpReceiverReportAsync(ct).ConfigureAwait(false);
+                await _client!.SendRtcpReceiverReportAsync(ct).ConfigureAwait(false);
+                await _client.SendKeepAliveAsync(ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
