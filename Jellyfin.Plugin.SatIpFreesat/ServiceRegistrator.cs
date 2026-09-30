@@ -17,8 +17,12 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<SatIpTunerHost>();
         serviceCollection.AddSingleton<ITunerHost>(sp => sp.GetRequiredService<SatIpTunerHost>());
         serviceCollection.AddSingleton<FreesatEpgCache>();
+        serviceCollection.AddSingleton<XmltvEpgCache>();
+        serviceCollection.AddSingleton<XmltvEpgSource>();
         serviceCollection.AddSingleton<FreesatEpgProvider>();
         serviceCollection.AddSingleton<IListingsProvider>(sp => sp.GetRequiredService<FreesatEpgProvider>());
+        serviceCollection.AddSingleton<XmltvEpgCollectorService>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<XmltvEpgCollectorService>());
         serviceCollection.AddHostedService<ScanSchedulerService>();
         serviceCollection.AddHostedService<FreesatEpgCollectorService>();
     }

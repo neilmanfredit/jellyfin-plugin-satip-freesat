@@ -22,17 +22,23 @@ public sealed class SatIpController : ControllerBase
     private readonly FreesatScanner _scanner;
     private readonly FreesatChannelStore _store;
     private readonly ScanJobService _scanJob;
+    private readonly XmltvEpgCache _xmltvCache;
+    private readonly XmltvEpgCollectorService _xmltvCollector;
     private readonly ILogger<SatIpController> _logger;
 
     public SatIpController(
         FreesatScanner scanner,
         FreesatChannelStore store,
         ScanJobService scanJob,
+        XmltvEpgCache xmltvCache,
+        XmltvEpgCollectorService xmltvCollector,
         ILogger<SatIpController> logger)
     {
         _scanner = scanner;
         _store = store;
         _scanJob = scanJob;
+        _xmltvCache = xmltvCache;
+        _xmltvCollector = xmltvCollector;
         _logger = logger;
     }
 
@@ -55,7 +61,10 @@ public sealed class SatIpController : ControllerBase
             cfg.PacketTimeoutSeconds,
             cfg.ExposeSubtitleStreams,
             cfg.PreferredSubtitleLanguage,
-            cfg.ForceDeinterlace));
+            cfg.ForceDeinterlace,
+            cfg.EnableXmltvEpg,
+            cfg.XmltvUrl,
+            cfg.XmltvRefreshHours));
     }
 
     [HttpPost("config")]
@@ -77,6 +86,9 @@ public sealed class SatIpController : ControllerBase
         if (req.ExposeSubtitleStreams.HasValue) cfg.ExposeSubtitleStreams = req.ExposeSubtitleStreams.Value;
         cfg.PreferredSubtitleLanguage = req.PreferredSubtitleLanguage ?? cfg.PreferredSubtitleLanguage;
         if (req.ForceDeinterlace.HasValue) cfg.ForceDeinterlace = req.ForceDeinterlace.Value;
+        if (req.EnableXmltvEpg.HasValue) cfg.EnableXmltvEpg = req.EnableXmltvEpg.Value;
+        cfg.XmltvUrl = req.XmltvUrl ?? cfg.XmltvUrl;
+        if (req.XmltvRefreshHours.HasValue) cfg.XmltvRefreshHours = req.XmltvRefreshHours.Value;
 
         plugin.SaveConfiguration();
         _logger.LogInformation(
@@ -269,6 +281,24 @@ public sealed class SatIpController : ControllerBase
         return Ok(new { message = "Channel store cleared. Trigger a new scan to repopulate." });
     }
 
+    [HttpGet("xmltv-status")]
+    public ActionResult<XmltvStatusResponse> GetXmltvStatus()
+    {
+        return Ok(new XmltvStatusResponse(
+            _xmltvCache.LastFetchedUtc?.ToString("O"),
+            _xmltvCache.LastError,
+            _xmltvCache.MappedChannelCount,
+            _xmltvCache.TotalProgramCount,
+            _store.Current?.Channels.Count ?? 0));
+    }
+
+    [HttpPost("xmltv-refresh")]
+    public ActionResult TriggerXmltvRefresh()
+    {
+        _xmltvCollector.RequestImmediateRefresh();
+        return Ok(new { message = "XMLTV refresh requested — check status shortly." });
+    }
+
     // ── Request / response types ────────────────────────────────────────────────
 
     public sealed record ResolveRegionResponse(
@@ -338,7 +368,10 @@ public sealed class SatIpController : ControllerBase
         [property: JsonPropertyName("packetTimeoutSeconds")] int PacketTimeoutSeconds,
         [property: JsonPropertyName("exposeSubtitleStreams")] bool ExposeSubtitleStreams,
         [property: JsonPropertyName("preferredSubtitleLanguage")] string PreferredSubtitleLanguage,
-        [property: JsonPropertyName("forceDeinterlace")] bool ForceDeinterlace);
+        [property: JsonPropertyName("forceDeinterlace")] bool ForceDeinterlace,
+        [property: JsonPropertyName("enableXmltvEpg")] bool EnableXmltvEpg,
+        [property: JsonPropertyName("xmltvUrl")] string XmltvUrl,
+        [property: JsonPropertyName("xmltvRefreshHours")] int XmltvRefreshHours);
 
     public sealed class PluginConfigRequest
     {
@@ -354,5 +387,15 @@ public sealed class SatIpController : ControllerBase
         [JsonPropertyName("exposeSubtitleStreams")] public bool? ExposeSubtitleStreams { get; set; }
         [JsonPropertyName("preferredSubtitleLanguage")] public string? PreferredSubtitleLanguage { get; set; }
         [JsonPropertyName("forceDeinterlace")] public bool? ForceDeinterlace { get; set; }
+        [JsonPropertyName("enableXmltvEpg")] public bool? EnableXmltvEpg { get; set; }
+        [JsonPropertyName("xmltvUrl")] public string? XmltvUrl { get; set; }
+        [JsonPropertyName("xmltvRefreshHours")] public int? XmltvRefreshHours { get; set; }
     }
+
+    public sealed record XmltvStatusResponse(
+        [property: JsonPropertyName("lastFetchedUtc")] string? LastFetchedUtc,
+        [property: JsonPropertyName("lastError")] string? LastError,
+        [property: JsonPropertyName("mappedChannelCount")] int MappedChannelCount,
+        [property: JsonPropertyName("totalProgramCount")] int TotalProgramCount,
+        [property: JsonPropertyName("totalChannelCount")] int TotalChannelCount);
 }

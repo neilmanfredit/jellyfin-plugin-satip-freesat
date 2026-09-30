@@ -205,6 +205,33 @@
                     </div>
                 </details>
 
+                <!-- EPG ───────────────────────────────────────────────────── -->
+                <details class="sifSection">
+                    <summary>Guide data (multi-day EPG)</summary>
+                    <div class="sifSectionBody">
+                        <div class="fieldDescription" style="margin-bottom:.8em">
+                            Over-the-air DVB EIT only reliably carries a few hours of guide data on most Freesat
+                            setups. Enable this to supplement it with a free third-party XMLTV guide (matched to
+                            your channels by name) for multi-day coverage.
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label><input is="emby-checkbox" type="checkbox" id="enableXmltvEpg" /><span>Supplement guide with an XMLTV source</span></label>
+                            <div class="fieldDescription checkboxFieldDescription">OTA EIT (present/following) is always used where available; XMLTV fills in everything beyond that.</div>
+                        </div>
+                        <div class="inputContainer" style="margin-top:.8em">
+                            <input is="emby-input" type="text" id="xmltvUrl" label="XMLTV guide URL" placeholder="https://…/guide.xml.gz" />
+                            <div class="fieldDescription">Plain or gzip XMLTV. Default is a free, no-key UK guide covering Freesat/Freeview/Sky channel names.</div>
+                        </div>
+                        <div class="inputContainer" style="margin-top:.8em;max-width:220px">
+                            <input is="emby-input" type="number" min="1" max="72" id="xmltvRefreshHours" label="Refresh interval (hours)" />
+                        </div>
+                        <div class="sifInlineButtons" style="margin-top:.8em">
+                            <button is="emby-button" type="button" id="btnXmltvRefresh" class="raised"><span>Refresh now</span></button>
+                        </div>
+                        <div id="xmltvStatus" class="sifMuted" role="status" aria-live="polite" style="margin-top:.6em"></div>
+                    </div>
+                </details>
+
                 <!-- Channels ─────────────────────────────────────────────── -->
                 <details class="sifSection">
                     <summary>Channel maintenance</summary>

@@ -61,4 +61,19 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     // ── Video ───────────────────────────────────────────────────────────────
 
     public bool ForceDeinterlace { get; set; } = false;
+
+    // ── EPG (multi-day schedule) ───────────────────────────────────────────
+
+    /// <summary>
+    /// Whether to supplement OTA DVB EIT (present/following-depth only on this platform — see
+    /// FreesatEpgCollectorService) with a third-party XMLTV guide for multi-day coverage.
+    /// </summary>
+    public bool EnableXmltvEpg { get; set; } = true;
+
+    /// <summary>XMLTV guide URL (plain or .gz). Default is a free, no-key UK union guide.</summary>
+    public string XmltvUrl { get; set; } =
+        "https://raw.githubusercontent.com/crisvale/channels-and-epg/main/epg/united-kingdom.xml.gz";
+
+    /// <summary>How often to re-download and re-parse the XMLTV guide.</summary>
+    public int XmltvRefreshHours { get; set; } = 8;
 }

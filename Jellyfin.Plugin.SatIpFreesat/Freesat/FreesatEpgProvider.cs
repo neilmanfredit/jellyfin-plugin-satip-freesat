@@ -27,16 +27,19 @@ public sealed class FreesatEpgProvider : IListingsProvider
     private readonly ILogger<FreesatEpgProvider> _logger;
     private readonly FreesatChannelStore _store;
     private readonly FreesatEpgCache _cache;
+    private readonly XmltvEpgCache _xmltvCache;
     private readonly ConcurrentDictionary<string, Lazy<Task<List<ProgramInfo>>>> _fallbackInFlight = new();
 
     public string Name => "SAT>IP Freesat EPG";
     public string Type => "satip-freesat";
 
-    public FreesatEpgProvider(ILogger<FreesatEpgProvider> logger, FreesatChannelStore store, FreesatEpgCache cache)
+    public FreesatEpgProvider(
+        ILogger<FreesatEpgProvider> logger, FreesatChannelStore store, FreesatEpgCache cache, XmltvEpgCache xmltvCache)
     {
         _logger = logger;
         _store = store;
         _cache = cache;
+        _xmltvCache = xmltvCache;
     }
 
     public async Task<IEnumerable<ProgramInfo>> GetProgramsAsync(
@@ -67,8 +70,25 @@ public sealed class FreesatEpgProvider : IListingsProvider
                 .ConfigureAwait(false);
         }
 
-        return muxPrograms
-            .Where(p => p.ChannelId == channelId && p.EndDate > startDateUtc && p.StartDate < endDateUtc)
+        var eitPrograms = muxPrograms.Where(p => p.ChannelId == channelId);
+
+        // OTA EIT only ever covers a few hours out on this platform (present/following) —
+        // see FreesatEpgCollectorService and XmltvEpgSource for why. Fill everything beyond
+        // that with the XMLTV-sourced cache, preferring EIT wherever both cover the same
+        // slot since it reflects this specific broadcast (last-minute schedule changes etc.).
+        var merged = eitPrograms.ToList();
+        if (_xmltvCache.TryGet(channelId, out var xmltvPrograms))
+        {
+            foreach (var p in xmltvPrograms)
+            {
+                bool overlapsEit = merged.Exists(e => e.StartDate < p.EndDate && e.EndDate > p.StartDate);
+                if (!overlapsEit) merged.Add(p);
+            }
+        }
+
+        return merged
+            .Where(p => p.EndDate > startDateUtc && p.StartDate < endDateUtc)
+            .OrderBy(p => p.StartDate)
             .ToList();
     }
 

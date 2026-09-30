@@ -248,6 +248,36 @@ export default function (view) {
         }
     }
 
+    // ── XMLTV guide ────────────────────────────────────────────────────────
+
+    function formatXmltvStatus(data) {
+        if (data.lastError) return 'Last refresh failed: ' + data.lastError;
+        if (!data.lastFetchedUtc) return 'Not refreshed yet.';
+        const when = new Date(data.lastFetchedUtc).toLocaleString();
+        return `Last refreshed ${when} — ${data.mappedChannelCount}/${data.totalChannelCount} channels matched, ${data.totalProgramCount} programs cached.`;
+    }
+
+    async function refreshXmltvStatus() {
+        const el = view.querySelector('#xmltvStatus');
+        try {
+            const data = await apiGet('SatIpFreesat/xmltv-status');
+            el.textContent = formatXmltvStatus(data);
+        } catch {
+            el.textContent = 'Unable to reach plugin API for XMLTV status.';
+        }
+    }
+
+    async function triggerXmltvRefresh() {
+        const el = view.querySelector('#xmltvStatus');
+        el.textContent = 'Refresh requested…';
+        try {
+            await ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('SatIpFreesat/xmltv-refresh') });
+            setTimeout(refreshXmltvStatus, 5000);
+        } catch {
+            el.textContent = 'Failed to request refresh — see Jellyfin logs.';
+        }
+    }
+
     // ── rebuild ────────────────────────────────────────────────────────────
 
     async function rebuildChannels() {
@@ -273,6 +303,9 @@ export default function (view) {
         view.querySelector('#exposeSubtitleStreams').checked = cfg.exposeSubtitleStreams === true;
         view.querySelector('#preferredSubtitleLanguage').value = cfg.preferredSubtitleLanguage || 'eng';
         view.querySelector('#forceDeinterlace').checked = cfg.forceDeinterlace === true;
+        view.querySelector('#enableXmltvEpg').checked = cfg.enableXmltvEpg !== false;
+        view.querySelector('#xmltvUrl').value = cfg.xmltvUrl || '';
+        view.querySelector('#xmltvRefreshHours').value = cfg.xmltvRefreshHours ?? 8;
 
         const tuners = Array.isArray(cfg.tuners) && cfg.tuners.length > 0 ? cfg.tuners : [{ rtspPort: 554, frontendNumber: 1 }];
         const countEl = view.querySelector('#tunerCount');
@@ -295,6 +328,9 @@ export default function (view) {
             exposeSubtitleStreams: view.querySelector('#exposeSubtitleStreams').checked,
             preferredSubtitleLanguage: view.querySelector('#preferredSubtitleLanguage').value.trim() || 'eng',
             forceDeinterlace: view.querySelector('#forceDeinterlace').checked,
+            enableXmltvEpg: view.querySelector('#enableXmltvEpg').checked,
+            xmltvUrl: view.querySelector('#xmltvUrl').value.trim(),
+            xmltvRefreshHours: intVal(view.querySelector('#xmltvRefreshHours'), 8, 1, 72),
         });
     }
 
@@ -304,7 +340,7 @@ export default function (view) {
     let loaded = false;
 
     async function onViewShow() {
-        if (loaded) { await refreshScanStatus(); return; }
+        if (loaded) { await refreshScanStatus(); await refreshXmltvStatus(); return; }
         loaded = true;
 
         try { cfg = await apiGet('SatIpFreesat/config'); } catch { cfg = {}; }
@@ -314,6 +350,7 @@ export default function (view) {
         loadRegions(regionSelect, cfg.regionKey);
         loadForm(cfg);
         await refreshScanStatus();
+        await refreshXmltvStatus();
     }
 
     // Rebuild tuner table when count spinner changes
@@ -330,6 +367,8 @@ export default function (view) {
     view.querySelector('#btnScan').addEventListener('click', triggerScan);
 
     view.querySelector('#btnRebuildChannels').addEventListener('click', rebuildChannels);
+
+    view.querySelector('#btnXmltvRefresh').addEventListener('click', triggerXmltvRefresh);
 
     view.querySelector('#SatIpFreesatConfigForm').addEventListener('submit', function (e) {
         e.preventDefault();
