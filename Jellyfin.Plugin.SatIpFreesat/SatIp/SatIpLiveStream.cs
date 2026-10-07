@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.Configuration;
+using Jellyfin.Plugin.SatIpFreesat.DvbSi;
 using Jellyfin.Plugin.SatIpFreesat.Freesat;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
@@ -37,12 +39,17 @@ public sealed class SatIpLiveStream : ILiveStream
 
     private readonly SatIpStreamProxy _proxy;
     private readonly IServerApplicationHost _appHost;
+    private readonly ILogger _logger;
+    // PMT PID for this channel — used in Open() to probe the proxy file for actual stream indices.
+    private readonly int? _pmtPid;
 
     public SatIpLiveStream(
         FreesatChannel channel, string serverAddress, TunerEntry tuner,
         Configuration.PluginConfiguration cfg, ILogger logger, IServerApplicationHost appHost)
     {
         _appHost = appHost;
+        _logger = logger;
+        _pmtPid = channel.PmtPid;
         FrontendNumber = tuner.FrontendNumber;
         OriginalStreamId = channel.ChannelId;
         TunerHostId = "satip-freesat";
@@ -104,6 +111,19 @@ public sealed class SatIpLiveStream : ILiveStream
     {
         await _proxy.OpenAsync(ct).ConfigureAwait(false);
 
+        // For channels with multiple audio streams, the stream indices we declared in
+        // BuildMediaStreams (Index = 1 + i) may be wrong. The broadcaster's PMT can include
+        // subtitle, teletext, and data streams between or around the audio streams, and
+        // minisatip delivers ALL of them — including ones we didn't request via pids=. ffmpeg
+        // assigns global stream indices (0:0, 0:1, 0:2…) in PMT order counting every
+        // elementary stream type, so e.g. BBC channels give: video(0), nar_audio(1),
+        // subtitle(2), eng_audio(3). With Index=2 for eng we'd map the subtitle instead.
+        // Read the PMT from the proxy file (which has been collecting data during keyframe
+        // sync) to find the real global index for each audio stream and fix the declaration
+        // before Jellyfin reads MediaSource.MediaStreams to build the ffmpeg -map arguments.
+        if (_pmtPid is int pmtPid && MediaSource.MediaStreams.Count(s => s.Type == MediaStreamType.Audio) > 1)
+            TryFixAudioIndicesFromProxy(pmtPid);
+
         // ffmpeg's file: protocol treats a growing local file as finite and exits cleanly on
         // EOF instead of polling for new bytes. Jellyfin's own tuner hosts (HdHomerun, M3U)
         // avoid this by routing playback through Jellyfin's own /LiveTv/LiveStreamFiles HTTP
@@ -117,6 +137,56 @@ public sealed class SatIpLiveStream : ILiveStream
         // plain HTTP is fine.
         MediaSource.Path = _appHost.GetApiUrlForLocalAccess(null, false) + "/LiveTv/LiveStreamFiles/" + UniqueId + "/stream.ts";
         MediaSource.Protocol = MediaProtocol.Http;
+    }
+
+    private void TryFixAudioIndicesFromProxy(int pmtPid)
+    {
+        try
+        {
+            var buf = new byte[64 * 1024];
+            int bytesRead;
+            using (var fs = new FileStream(_proxy.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                bytesRead = fs.Read(buf, 0, buf.Length);
+
+            if (bytesRead < TsReader.PacketSize) return;
+
+            int[]? audioIndices = null;
+            var reader = new TsReader();
+            reader.SubscribePid(pmtPid);
+            reader.SectionReady += (_, section) =>
+            {
+                if (audioIndices is not null) return;
+                var pmt = PmtParser.ParsePmt(section);
+                if (pmt is not null && pmt.AudioStreams.Count > 0)
+                    audioIndices = pmt.AudioStreams.Select(a => a.PmtStreamIndex).ToArray();
+            };
+            reader.Feed(buf.AsSpan(0, bytesRead));
+
+            if (audioIndices is null)
+            {
+                _logger.LogWarning("SAT>IP: PMT not found in first {Bytes} bytes of proxy file — audio stream indices may be wrong", bytesRead);
+                return;
+            }
+
+            var audioStreams = MediaSource.MediaStreams.Where(s => s.Type == MediaStreamType.Audio).ToList();
+            bool changed = false;
+            for (int i = 0; i < audioIndices.Length && i < audioStreams.Count; i++)
+            {
+                if (audioIndices[i] > 0 && audioStreams[i].Index != audioIndices[i])
+                {
+                    audioStreams[i].Index = audioIndices[i];
+                    changed = true;
+                }
+            }
+
+            if (changed)
+                _logger.LogInformation("SAT>IP: corrected audio stream indices from proxy PMT: [{Indices}]",
+                    string.Join(", ", audioIndices));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SAT>IP: failed to read proxy PMT for audio index correction");
+        }
     }
     public Task Close() => _proxy.CloseAsync();
     public void Dispose() { }
@@ -206,10 +276,16 @@ public sealed class SatIpLiveStream : ILiveStream
                 bool isDefault = !audio.IsAudioDescription && !defaultAssigned;
                 if (isDefault) defaultAssigned = true;
 
+                // Use the PMT-order stream index when the channel was scanned with the new
+                // PmtStreamIndex field (non-zero). For older scan data (PmtStreamIndex=0) we
+                // fall back to 1+i and rely on TryFixAudioIndicesFromProxy() in Open() to
+                // correct it at stream-open time once the live PMT is readable.
+                int streamIndex = audio.PmtStreamIndex > 0 ? audio.PmtStreamIndex : 1 + i;
+
                 streams.Add(new MediaStream
                 {
                     Type = MediaStreamType.Audio,
-                    Index = 1 + i,
+                    Index = streamIndex,
                     IsDefault = isDefault,
                     // Freesat's SD/HD channels are overwhelmingly plain stereo MP2/AAC; 2 is a
                     // safe best-effort default. The same Channels=2 constraint that prevents the

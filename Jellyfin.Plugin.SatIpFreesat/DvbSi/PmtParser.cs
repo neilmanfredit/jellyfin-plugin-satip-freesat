@@ -57,6 +57,7 @@ public static class PmtParser
         int programInfoLength = ((section[10] & 0x0F) << 8) | section[11];
         int pos = 12 + programInfoLength;
 
+        int streamIndex = 0;
         int? videoPid = null;
         var audioStreams = new List<AudioStreamInfo>();
 
@@ -87,9 +88,18 @@ public static class PmtParser
                     Pid = elementaryPid,
                     Language = language,
                     AudioType = audioType,
+                    // Record this audio stream's actual position in the full PMT stream list.
+                    // ffmpeg assigns global stream indices (0:0, 0:1, 0:2…) based on PMT order
+                    // counting ALL elementary streams — video, audio, subtitle, teletext, data.
+                    // Broadcasters often interleave non-audio streams between audio streams
+                    // (e.g. BBC: video(0), nar_audio(1), subtitle(2), eng_audio(3)), which means
+                    // the second audio stream is at global index 3, not 2.
+                    PmtStreamIndex = streamIndex,
                 });
             }
 
+            // Count every stream type so the index matches ffmpeg's numbering exactly.
+            streamIndex++;
             pos += esInfoLength;
         }
 
@@ -156,6 +166,15 @@ public sealed class AudioStreamInfo
     /// BBC, ITV, and Channel 4 use lang="nar" with AudioType=0x00 instead — catch both conventions.
     /// </remarks>
     public bool IsAudioDescription => AudioType == 0x03 || Language == "nar";
+
+    /// <summary>
+    /// The 0-based position of this audio stream in the broadcaster's PMT, counting every
+    /// elementary stream type (video, audio, subtitle, teletext, data). This matches the
+    /// global stream index ffmpeg assigns when it opens the TS — e.g. if the PMT order is
+    /// video(0), nar(1), subtitle(2), eng(3), then the eng audio has PmtStreamIndex=3.
+    /// Zero means this field was not populated (channel scanned before this was introduced).
+    /// </summary>
+    public int PmtStreamIndex { get; init; }
 }
 
 /// <summary>Elementary stream PIDs resolved from a single service's PMT section.</summary>
