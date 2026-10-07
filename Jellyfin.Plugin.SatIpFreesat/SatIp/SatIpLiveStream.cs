@@ -202,8 +202,6 @@ public sealed class SatIpLiveStream : ILiveStream
             var pids = $"0,{pmtPid},{videoPid}";
             foreach (var audio in channel.AudioStreams)
                 pids += $",{audio.Pid}";
-            foreach (var sub in channel.SubtitleStreams)
-                pids += $",{sub.Pid}";
             return pids;
         }
 
@@ -296,26 +294,6 @@ public sealed class SatIpLiveStream : ILiveStream
             // playback doesn't start muted.
             if (!defaultAssigned && streams.Count > 1)
                 streams[1].IsDefault = true;
-        }
-
-        // Subtitle streams are declared after all audio so their indices (1+audioCount+i)
-        // never affect Jellyfin's audio-map formula (DefaultAudioStreamIndex+1). IsDefault=false
-        // means the player starts with subtitles off; the user enables them via the player UI.
-        // Requires a rescan to populate; old scan data produces an empty list → no change.
-        var subtitleStreams = channel.SubtitleStreams;
-        for (int i = 0; i < subtitleStreams.Count; i++)
-        {
-            var sub = subtitleStreams[i];
-            streams.Add(new MediaStream
-            {
-                Type = MediaStreamType.Subtitle,
-                Index = 1 + audioStreams.Count + i,
-                IsDefault = false,
-                IsForced = false,
-                Language = string.IsNullOrEmpty(sub.Language) ? "eng" : sub.Language,
-                Codec = "dvb_subtitle",
-                Title = sub.IsHearingImpaired ? "Hearing Impaired" : null,
-            });
         }
 
         return streams;

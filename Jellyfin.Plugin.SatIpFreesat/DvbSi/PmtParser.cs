@@ -145,18 +145,21 @@ public static class PmtParser
                            || (streamType == 0x06 && HasAc3Descriptor(descs));
             bool isSubtitle = !isAudio && streamType == 0x06 && HasDvbSubtitleDescriptor(descs);
 
-            if      (isVideo)    videoRanges.Add((pos, 5 + esInfoLength));
-            else if (isAudio)    audioRanges.Add((pos, 5 + esInfoLength));
-            else if (isSubtitle) subtitleRanges.Add((pos, 5 + esInfoLength));
-            // teletext, data, proprietary: dropped
+            if      (isVideo) videoRanges.Add((pos, 5 + esInfoLength));
+            else if (isAudio) audioRanges.Add((pos, 5 + esInfoLength));
+            // subtitle, teletext, data, proprietary: dropped from rewritten PMT.
+            // Declaring dvb_subtitle streams to Jellyfin causes it to attempt burn-in via a
+            // subtitle file extraction path that fails for bitmap subtitles, crashing ffmpeg.
+            // SubtitleStreamInfo is still populated in the scanner for future use, but subtitle
+            // PIDs are not requested and not included here until a proper passthrough path exists.
+            _ = isSubtitle; _ = subtitleRanges;
 
             pos = entryEnd;
         }
 
         int esLoopLen = 0;
-        foreach (var (_, len) in videoRanges)    esLoopLen += len;
-        foreach (var (_, len) in audioRanges)    esLoopLen += len;
-        foreach (var (_, len) in subtitleRanges) esLoopLen += len;
+        foreach (var (_, len) in videoRanges) esLoopLen += len;
+        foreach (var (_, len) in audioRanges) esLoopLen += len;
 
         // section_length = service_id(2)+version(1)+sec#(1)+last_sec#(1)+PCR_PID(2)+
         //                  prog_info_len(2)+prog_info+es_loop+CRC32(4)
@@ -169,7 +172,7 @@ public static class PmtParser
         s[2] = (byte)(newSectionLength & 0xFF);
         original.Slice(3, 9 + programInfoLength).CopyTo(s.AsSpan(3));
         int w = 12 + programInfoLength;
-        foreach (var ranges in new[] { videoRanges, audioRanges, subtitleRanges })
+        foreach (var ranges in new[] { videoRanges, audioRanges })
         foreach (var (start, length) in ranges)
         {
             original.Slice(start, length).CopyTo(s.AsSpan(w));

@@ -9,6 +9,22 @@
     "imageUrl": "https://raw.githubusercontent.com/neilmanfredit/jellyfin-plugin-satip-freesat/main/docs/icon.png",
     "versions": [
       {
+        "version": "1.9.46.0",
+        "changelog": "fix: remove dvb_subtitle MediaStream declarations — Jellyfin burn-in path crashes ffmpeg on bitmap subtitles; scanner data retained for future use",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.46/jellyfin-plugin-satip-freesat-v1.9.46-jellyfin12.zip",
+        "checksum": "00000000000000000000000000000000",
+        "timestamp": "2026-10-07T17:00:00Z"
+      },
+      {
+        "version": "1.9.46.0",
+        "changelog": "fix: remove dvb_subtitle MediaStream declarations — Jellyfin burn-in path crashes ffmpeg on bitmap subtitles; scanner data retained for future use",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.46/jellyfin-plugin-satip-freesat-v1.9.46-jellyfin10.zip",
+        "checksum": "00000000000000000000000000000000",
+        "timestamp": "2026-10-07T17:00:00Z"
+      },
+      {
         "version": "1.9.45.0",
         "changelog": "feat: DVB subtitle passthrough as selectable tracks (off by default)",
         "targetAbi": "12.0.0.0",
