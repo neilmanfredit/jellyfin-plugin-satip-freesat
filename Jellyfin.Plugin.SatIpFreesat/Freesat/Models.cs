@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Jellyfin.Plugin.SatIpFreesat.DvbSi;
 
 namespace Jellyfin.Plugin.SatIpFreesat.Freesat;
 
@@ -43,8 +44,8 @@ public sealed class ServiceInfo
     /// <summary>Video elementary PID, resolved from this service's PMT during scan.</summary>
     public int? VideoPid { get; set; }
 
-    /// <summary>Primary audio elementary PID, resolved from this service's PMT during scan.</summary>
-    public int? AudioPid { get; set; }
+    /// <summary>All audio elementary streams resolved from this service's PMT during scan.</summary>
+    public List<AudioStreamInfo> AudioStreams { get; set; } = [];
 }
 
 /// <summary>A Freesat bouquet entry associating a service with an LCN.</summary>
@@ -84,8 +85,8 @@ public sealed class FreesatChannel
     /// <summary>Video elementary PID, resolved from this channel's PMT during scan.</summary>
     public int? VideoPid { get; init; }
 
-    /// <summary>Primary audio elementary PID, resolved from this channel's PMT during scan.</summary>
-    public int? AudioPid { get; init; }
+    /// <summary>All audio elementary streams resolved from this channel's PMT during scan.</summary>
+    public IReadOnlyList<AudioStreamInfo> AudioStreams { get; init; } = [];
 }
 
 /// <summary>Persisted result of a channel scan.</summary>
