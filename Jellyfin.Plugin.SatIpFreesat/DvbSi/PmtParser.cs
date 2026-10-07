@@ -150,8 +150,12 @@ public sealed class AudioStreamInfo
     /// </summary>
     public byte AudioType { get; init; }
 
-    /// <summary>True when this stream carries audio description (AudioType 0x03).</summary>
-    public bool IsAudioDescription => AudioType == 0x03;
+    /// <summary>True when this stream carries audio description (AudioType 0x03 or language "nar").</summary>
+    /// <remarks>
+    /// DVB spec defines AudioType 0x03 as "visually impaired commentary" (audio description).
+    /// BBC, ITV, and Channel 4 use lang="nar" with AudioType=0x00 instead — catch both conventions.
+    /// </remarks>
+    public bool IsAudioDescription => AudioType == 0x03 || Language == "nar";
 }
 
 /// <summary>Elementary stream PIDs resolved from a single service's PMT section.</summary>

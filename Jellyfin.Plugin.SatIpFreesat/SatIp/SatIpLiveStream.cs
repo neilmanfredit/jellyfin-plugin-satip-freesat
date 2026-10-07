@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.Configuration;
@@ -84,7 +83,12 @@ public sealed class SatIpLiveStream : ILiveStream
             // guarantees the proxy file begins at a keyframe boundary with PAT/PMT/audio
             // continuously present, so ffmpeg needs far less data than an arbitrary mid-GOP join
             // to identify the streams.
-            AnalyzeDurationMs = 3000,
+            // For channels with multiple audio streams (e.g. BBC HD: AC-3 main + MP2 nar), the
+            // AC-3 stream (stream_type 0x06) takes several seconds longer to appear in minisatip's
+            // remapped RTP/TS output than the MP2 stream. 3 s is insufficient to detect both, so
+            // we extend the probe window to 8 s for multi-audio channels. Single-audio channels
+            // keep the 3 s window to avoid unnecessary startup latency.
+            AnalyzeDurationMs = channel.AudioStreams.Count > 1 ? 8000 : 3000,
             RequiresOpening = true,
             RequiresClosing = true,
             SupportsProbing = true,
@@ -162,16 +166,18 @@ public sealed class SatIpLiveStream : ILiveStream
             },
         };
 
-        // Sort non-AD tracks first so the main stereo audio is always the default (Index 1).
-        // AD tracks (DVB audio_type 0x03) are appended after the main track(s) as selectable
-        // alternatives. This ordering also determines the stream index ffmpeg sees at probe
-        // time, since all audio PIDs arrive in the TS and ffmpeg enumerates them in PID order
-        // (which matches PMT order, which matches our sort here: main before AD).
-        var orderedAudio = channel.AudioStreams
-            .OrderBy(a => a.IsAudioDescription ? 1 : 0)
-            .ToList();
+        // Keep audio streams in PMT order — do NOT sort by IsAudioDescription here.
+        // minisatip remaps the TS and assigns sequential PIDs (0x101, 0x102...) to elementary
+        // streams in the order they appear in the broadcaster's PMT. ffmpeg then assigns stream
+        // indices (0:1, 0:2...) in the same order. Our declared Index values must therefore match
+        // PMT order: whatever the PMT puts first becomes stream 0:1 = our Index 1, and so on.
+        // Sorting here would misalign our Index N with ffmpeg's 0:N and map wrong streams.
+        // For BBC HD channels the PMT puts the nar/AD track first (stream 0:1) and the eng/AC-3
+        // main audio second (stream 0:2). We set IsDefault on the first non-AD stream regardless
+        // of its position, so the user always starts with the main programme audio by default.
+        var audioStreams = channel.AudioStreams;
 
-        if (orderedAudio.Count == 0)
+        if (audioStreams.Count == 0)
         {
             // PMT audio not resolved — declare a generic stereo stream as a hint.
             // Without a declared Channels count, EncodingHelper.GetNumAudioChannelsParam
@@ -194,9 +200,9 @@ public sealed class SatIpLiveStream : ILiveStream
         else
         {
             bool defaultAssigned = false;
-            for (int i = 0; i < orderedAudio.Count; i++)
+            for (int i = 0; i < audioStreams.Count; i++)
             {
-                var audio = orderedAudio[i];
+                var audio = audioStreams[i];
                 bool isDefault = !audio.IsAudioDescription && !defaultAssigned;
                 if (isDefault) defaultAssigned = true;
 
