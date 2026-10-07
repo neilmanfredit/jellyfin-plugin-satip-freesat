@@ -10,19 +10,19 @@
     "versions": [
       {
         "version": "1.9.46.0",
-        "changelog": "fix: remove dvb_subtitle MediaStream declarations — Jellyfin burn-in path crashes ffmpeg on bitmap subtitles; scanner data retained for future use",
+        "changelog": "fix: remove dvb_subtitle MediaStream declarations that crash ffmpeg",
         "targetAbi": "12.0.0.0",
         "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.46/jellyfin-plugin-satip-freesat-v1.9.46-jellyfin12.zip",
-        "checksum": "00000000000000000000000000000000",
-        "timestamp": "2026-10-07T17:00:00Z"
+        "checksum": "3038e284effc691c54ecd17164d4bbbf",
+        "timestamp": "2026-10-07T16:00:05Z"
       },
       {
         "version": "1.9.46.0",
-        "changelog": "fix: remove dvb_subtitle MediaStream declarations — Jellyfin burn-in path crashes ffmpeg on bitmap subtitles; scanner data retained for future use",
+        "changelog": "fix: remove dvb_subtitle MediaStream declarations that crash ffmpeg",
         "targetAbi": "10.9.0.0",
         "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.46/jellyfin-plugin-satip-freesat-v1.9.46-jellyfin10.zip",
-        "checksum": "00000000000000000000000000000000",
-        "timestamp": "2026-10-07T17:00:00Z"
+        "checksum": "c7a9b02097c4ece8501f7d24813558ae",
+        "timestamp": "2026-10-07T16:00:05Z"
       },
       {
         "version": "1.9.45.0",
