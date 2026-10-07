@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.SatIpFreesat.DvbSi;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SatIpFreesat.SatIp;
@@ -30,6 +32,10 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     private readonly SatIpMuxParams _muxParams;
     private readonly string _pids;
     private readonly int? _videoPid;
+    private readonly int? _pmtPid;
+    // PIDs that are allowed through the filter (PAT + PMT + video + audio). Null = no filtering
+    // (pids=all fallback for channels whose PMT couldn't be resolved at scan time).
+    private readonly HashSet<int>? _allowedPids;
     private readonly CancellationTokenSource _lifetimeCts = new();
 
     private RtspClient? _client;
@@ -38,11 +44,15 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     private Task? _keepAliveTask;
     private bool _videoSynced;
     private bool _opened;
+    // Cached 188-byte TS packet containing the rewritten PMT (audio+video only).
+    private byte[]? _cleanPmtPacket;
+    private int _pmtContinuityCounter;
 
     public string FilePath { get; }
 
     public SatIpStreamProxy(
-        ILogger logger, string host, int port, SatIpMuxParams muxParams, string pids, int? videoPid)
+        ILogger logger, string host, int port, SatIpMuxParams muxParams, string pids, int? videoPid,
+        int? pmtPid = null)
     {
         _logger = logger;
         _host = host;
@@ -50,7 +60,19 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
         _muxParams = muxParams;
         _pids = pids;
         _videoPid = videoPid;
+        _pmtPid = pmtPid;
+        _allowedPids = ParseAllowedPids(pids);
         FilePath = Path.Combine(Path.GetTempPath(), $"satip-live-{Guid.NewGuid():N}.ts");
+    }
+
+    private static HashSet<int>? ParseAllowedPids(string pids)
+    {
+        if (pids == "all") return null; // no filtering for whole-transponder fallback
+        var allowed = new HashSet<int>();
+        foreach (var part in pids.Split(','))
+            if (int.TryParse(part.Trim(), out int pid))
+                allowed.Add(pid);
+        return allowed.Count > 0 ? allowed : null;
     }
 
     public async Task OpenAsync(CancellationToken openCt)
@@ -129,7 +151,7 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     /// </summary>
     private async Task SyncToKeyframeAsync(CancellationToken openCt)
     {
-        if (_videoPid is not int videoPid)
+        if (_videoPid is not int)
         {
             // Unknown video PID (pids=all fallback) — can't target a specific PID's keyframes.
             _videoSynced = true;
@@ -146,7 +168,7 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
                 if (payload is null) return; // stream ended before we ever synced
                 if (payload.Length == 0) continue;
 
-                await WriteFilteredAsync(payload, videoPid, openCt).ConfigureAwait(false);
+                await WritePidFilteredAsync(payload, openCt).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (!openCt.IsCancellationRequested)
@@ -177,14 +199,7 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
                 if (payload is null) break;
                 if (payload.Length == 0) continue;
 
-                if (_videoSynced || _videoPid is not int videoPid)
-                {
-                    await _fileStream!.WriteAsync(payload, ct).ConfigureAwait(false);
-                }
-                else
-                {
-                    await WriteFilteredAsync(payload, videoPid, ct).ConfigureAwait(false);
-                }
+                await WritePidFilteredAsync(payload, ct).ConfigureAwait(false);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -194,46 +209,119 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// Writes every 188-byte TS packet in <paramref name="tsData"/> to the file except
-    /// video-PID packets before the first random-access point, which are dropped. Once a
-    /// random-access point on the video PID is found, <see cref="_videoSynced"/> is set and
-    /// that packet (and everything after it in this payload) is written normally.
+    /// Writes TS packets from <paramref name="tsData"/> to the proxy file with three filters:
+    /// (1) drops pre-keyframe video packets (keyframe sync); (2) drops PIDs that aren't in the
+    /// allowed set (subtitle, teletext, data — which ffmpeg would otherwise count in its global
+    /// stream index numbering, misaligning Jellyfin's audio -map arguments); (3) substitutes
+    /// PMT packets with a rewritten version that lists only video and audio ES entries, ensuring
+    /// ffmpeg sees audio streams at consecutive indices immediately after video.
     /// </summary>
-    private async Task WriteFilteredAsync(byte[] tsData, int videoPid, CancellationToken ct)
+    private async Task WritePidFilteredAsync(byte[] tsData, CancellationToken ct)
     {
         int runStart = -1;
 
         for (int off = 0; off + 188 <= tsData.Length; off += 188)
         {
-            bool isVideoPacket = tsData[off] == 0x47
-                && (((tsData[off + 1] & 0x1F) << 8) | tsData[off + 2]) == videoPid;
+            if (tsData[off] != 0x47) continue;
 
-            bool drop = isVideoPacket && !_videoSynced;
+            int pid = ((tsData[off + 1] & 0x1F) << 8) | tsData[off + 2];
 
-            if (drop && isVideoPacket && IsRandomAccessPoint(tsData.AsSpan(off, 188)))
+            // 1. Keyframe sync: drop video packets until we see a random-access point.
+            if (!_videoSynced && pid == _videoPid)
             {
-                _videoSynced = true;
-                drop = false;
+                if (IsRandomAccessPoint(tsData.AsSpan(off, 188)))
+                    _videoSynced = true;
+                else
+                {
+                    if (runStart >= 0)
+                    {
+                        await _fileStream!.WriteAsync(tsData.AsMemory(runStart, off - runStart), ct).ConfigureAwait(false);
+                        runStart = -1;
+                    }
+                    continue;
+                }
             }
 
-            if (drop)
+            // 2. PMT rewriting: replace the broadcaster's PMT with a stripped version that
+            //    lists only video and audio ES entries. This prevents ffmpeg from assigning
+            //    a global stream index to subtitle/teletext PIDs and pushing audio indices up.
+            if (_pmtPid is int pmtPid && pid == pmtPid)
             {
                 if (runStart >= 0)
                 {
                     await _fileStream!.WriteAsync(tsData.AsMemory(runStart, off - runStart), ct).ConfigureAwait(false);
                     runStart = -1;
                 }
+
+                if (_cleanPmtPacket is null)
+                {
+                    var section = ExtractSectionFromTsPacket(tsData.AsSpan(off, 188));
+                    if (!section.IsEmpty)
+                    {
+                        var cleanSection = PmtParser.RebuildPmtWithAudioVideoOnly(section);
+                        if (cleanSection is not null)
+                            _cleanPmtPacket = PmtParser.BuildPmtTsPacket(cleanSection, pmtPid);
+                    }
+                }
+
+                if (_cleanPmtPacket is not null)
+                {
+                    var pmtPkt = (byte[])_cleanPmtPacket.Clone();
+                    pmtPkt[3] = (byte)((pmtPkt[3] & 0xF0) | (_pmtContinuityCounter & 0x0F));
+                    _pmtContinuityCounter = (_pmtContinuityCounter + 1) & 0x0F;
+                    await _fileStream!.WriteAsync(pmtPkt, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    // PMT couldn't be parsed yet — pass original as fallback
+                    await _fileStream!.WriteAsync(tsData.AsMemory(off, 188), ct).ConfigureAwait(false);
+                }
+                continue;
             }
-            else if (runStart < 0)
+
+            // 3. PID allow-list: drop everything that isn't PAT, PMT, video, or audio.
+            if (_allowedPids is not null && !_allowedPids.Contains(pid))
             {
-                runStart = off;
+                if (runStart >= 0)
+                {
+                    await _fileStream!.WriteAsync(tsData.AsMemory(runStart, off - runStart), ct).ConfigureAwait(false);
+                    runStart = -1;
+                }
+                continue;
             }
+
+            // Keep this packet — accumulate contiguous runs for efficient bulk writes.
+            if (runStart < 0)
+                runStart = off;
         }
 
         if (runStart >= 0)
-        {
             await _fileStream!.WriteAsync(tsData.AsMemory(runStart, tsData.Length - runStart), ct).ConfigureAwait(false);
-        }
+    }
+
+    /// <summary>
+    /// Extracts the first SI section from a TS packet that has the payload_unit_start_indicator
+    /// set. Returns an empty span if the packet carries no new section start.
+    /// </summary>
+    private static ReadOnlySpan<byte> ExtractSectionFromTsPacket(ReadOnlySpan<byte> pkt)
+    {
+        bool pusi = (pkt[1] & 0x40) != 0;
+        if (!pusi) return ReadOnlySpan<byte>.Empty;
+
+        int afc = (pkt[3] >> 4) & 0x03;
+        bool hasPayload = (afc & 0x01) != 0;
+        if (!hasPayload) return ReadOnlySpan<byte>.Empty;
+
+        int payloadStart = 4;
+        if ((afc & 0x02) != 0) // has adaptation field
+            payloadStart = 5 + pkt[4];
+        if (payloadStart >= 188) return ReadOnlySpan<byte>.Empty;
+
+        int pointerField = pkt[payloadStart];
+        int sectionStart = payloadStart + 1 + pointerField;
+        if (sectionStart >= 188) return ReadOnlySpan<byte>.Empty;
+
+        return pkt.Slice(sectionStart, 188 - sectionStart);
     }
 
     /// <summary>

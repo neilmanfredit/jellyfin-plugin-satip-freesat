@@ -106,6 +106,93 @@ public static class PmtParser
         return new PmtInfo(serviceId, videoPid, audioStreams);
     }
 
+    /// <summary>
+    /// Rebuilds a PMT section keeping only video and audio ES entries. Returns null if the
+    /// section is malformed or too large to fit in a single TS packet after stripping.
+    /// </summary>
+    public static byte[]? RebuildPmtWithAudioVideoOnly(ReadOnlySpan<byte> original)
+    {
+        if (original.Length < 12 || original[0] != TableIdPmt) return null;
+
+        int sectionLength = ((original[1] & 0x0F) << 8) | original[2];
+        int end = Math.Min(3 + sectionLength - 4, original.Length); // -4 to exclude existing CRC
+        int programInfoLength = ((original[10] & 0x0F) << 8) | original[11];
+
+        var keepRanges = new List<(int start, int length)>();
+        int pos = 12 + programInfoLength;
+        while (pos + 5 <= end)
+        {
+            int streamType = original[pos];
+            int esInfoLength = ((original[pos + 3] & 0x0F) << 8) | original[pos + 4];
+            int entryEnd = pos + 5 + esInfoLength;
+            if (entryEnd > end) break;
+
+            var descs = original.Slice(pos + 5, esInfoLength);
+            bool isVideo = VideoStreamTypes.Contains(streamType);
+            bool isAudio = AudioStreamTypes.Contains(streamType)
+                || (streamType == 0x06 && HasAc3Descriptor(descs));
+            if (isVideo || isAudio)
+                keepRanges.Add((pos, 5 + esInfoLength));
+
+            pos = entryEnd;
+        }
+
+        int esLoopLen = 0;
+        foreach (var (_, len) in keepRanges) esLoopLen += len;
+
+        // section_length = service_id(2)+version(1)+sec#(1)+last_sec#(1)+PCR_PID(2)+
+        //                  prog_info_len(2)+prog_info+es_loop+CRC32(4) = 9+prog_info+es+4
+        int newSectionLength = 9 + programInfoLength + esLoopLen + 4;
+        if (newSectionLength > 0x0FFF) return null; // sanity cap
+
+        var s = new byte[3 + newSectionLength];
+        s[0] = original[0]; // table_id = 0x02
+        s[1] = (byte)(0xB0 | (newSectionLength >> 8));
+        s[2] = (byte)(newSectionLength & 0xFF);
+        original.Slice(3, 9 + programInfoLength).CopyTo(s.AsSpan(3)); // copy header+prog_info
+        int w = 12 + programInfoLength;
+        foreach (var (start, length) in keepRanges)
+        {
+            original.Slice(start, length).CopyTo(s.AsSpan(w));
+            w += length;
+        }
+        uint crc = ComputeDvbCrc32(s.AsSpan(0, w));
+        s[w++] = (byte)(crc >> 24); s[w++] = (byte)(crc >> 16);
+        s[w++] = (byte)(crc >> 8);  s[w] = (byte)(crc & 0xFF);
+        return s;
+    }
+
+    /// <summary>
+    /// Packs a rebuilt PMT section into a 188-byte TS packet. The caller must update the
+    /// continuity counter in byte [3] before writing. Returns null if section exceeds 183 bytes.
+    /// </summary>
+    public static byte[]? BuildPmtTsPacket(byte[] section, int pmtPid)
+    {
+        if (section.Length > 183) return null;
+        var pkt = new byte[188];
+        pkt[0] = 0x47;
+        pkt[1] = (byte)(0x40 | ((pmtPid >> 8) & 0x1F)); // PUSI=1
+        pkt[2] = (byte)(pmtPid & 0xFF);
+        pkt[3] = 0x10; // payload-only; caller sets continuity counter
+        pkt[4] = 0x00; // pointer_field = 0
+        section.CopyTo(pkt, 5);
+        for (int i = 5 + section.Length; i < 188; i++) pkt[i] = 0xFF;
+        return pkt;
+    }
+
+    /// <summary>DVB CRC-32 (polynomial 0x04C11DB7, initial value 0xFFFFFFFF, no output inversion).</summary>
+    internal static uint ComputeDvbCrc32(ReadOnlySpan<byte> data)
+    {
+        uint crc = 0xFFFFFFFF;
+        foreach (byte b in data)
+        {
+            crc ^= (uint)b << 24;
+            for (int i = 0; i < 8; i++)
+                crc = (crc & 0x80000000U) != 0 ? (crc << 1) ^ 0x04C11DB7U : crc << 1;
+        }
+        return crc;
+    }
+
     private static bool HasAc3Descriptor(ReadOnlySpan<byte> descs)
     {
         int i = 0;

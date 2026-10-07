@@ -66,7 +66,7 @@ public sealed class SatIpLiveStream : ILiveStream
         };
 
         var pids = BuildPids(channel);
-        _proxy = new SatIpStreamProxy(logger, serverAddress, tuner.RtspPort, muxParams, pids, channel.VideoPid);
+        _proxy = new SatIpStreamProxy(logger, serverAddress, tuner.RtspPort, muxParams, pids, channel.VideoPid, channel.PmtPid);
 
         MediaSource = new MediaSourceInfo
         {
@@ -276,16 +276,10 @@ public sealed class SatIpLiveStream : ILiveStream
                 bool isDefault = !audio.IsAudioDescription && !defaultAssigned;
                 if (isDefault) defaultAssigned = true;
 
-                // Use the PMT-order stream index when the channel was scanned with the new
-                // PmtStreamIndex field (non-zero). For older scan data (PmtStreamIndex=0) we
-                // fall back to 1+i and rely on TryFixAudioIndicesFromProxy() in Open() to
-                // correct it at stream-open time once the live PMT is readable.
-                int streamIndex = audio.PmtStreamIndex > 0 ? audio.PmtStreamIndex : 1 + i;
-
                 streams.Add(new MediaStream
                 {
                     Type = MediaStreamType.Audio,
-                    Index = streamIndex,
+                    Index = 1 + i,
                     IsDefault = isDefault,
                     // Freesat's SD/HD channels are overwhelmingly plain stereo MP2/AAC; 2 is a
                     // safe best-effort default. The same Channels=2 constraint that prevents the
