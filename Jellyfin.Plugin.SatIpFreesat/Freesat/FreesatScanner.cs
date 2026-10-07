@@ -392,6 +392,7 @@ public sealed class FreesatScanner
                         svc.PmtPid = patMap.GetValueOrDefault(info.ServiceId);
                         svc.VideoPid = info.VideoPid;
                         svc.AudioStreams = [.. info.AudioStreams];
+                        svc.SubtitleStreams = [.. info.SubtitleStreams];
                     }
                 };
 
@@ -591,6 +592,7 @@ public sealed class FreesatScanner
                 PmtPid = svc.PmtPid,
                 VideoPid = svc.VideoPid,
                 AudioStreams = svc.AudioStreams,
+                SubtitleStreams = svc.SubtitleStreams,
             });
         }
 
@@ -633,6 +635,7 @@ public sealed class FreesatScanner
                 PmtPid = svc.PmtPid,
                 VideoPid = svc.VideoPid,
                 AudioStreams = svc.AudioStreams,
+                SubtitleStreams = svc.SubtitleStreams,
             });
         }
 

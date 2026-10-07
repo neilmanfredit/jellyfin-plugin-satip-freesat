@@ -60,6 +60,7 @@ public static class PmtParser
         int streamIndex = 0;
         int? videoPid = null;
         var audioStreams = new List<AudioStreamInfo>();
+        var subtitleStreams = new List<SubtitleStreamInfo>();
 
         while (pos + 5 <= end)
         {
@@ -75,6 +76,7 @@ public static class PmtParser
             bool isVideo = videoPid is null && VideoStreamTypes.Contains(streamType);
             bool isAudio = AudioStreamTypes.Contains(streamType)
                 || (streamType == 0x06 && HasAc3Descriptor(descriptors));
+            bool isSubtitle = !isAudio && streamType == 0x06 && HasDvbSubtitleDescriptor(descriptors);
 
             if (isVideo)
             {
@@ -88,29 +90,35 @@ public static class PmtParser
                     Pid = elementaryPid,
                     Language = language,
                     AudioType = audioType,
-                    // Record this audio stream's actual position in the full PMT stream list.
-                    // ffmpeg assigns global stream indices (0:0, 0:1, 0:2…) based on PMT order
-                    // counting ALL elementary streams — video, audio, subtitle, teletext, data.
-                    // Broadcasters often interleave non-audio streams between audio streams
-                    // (e.g. BBC: video(0), nar_audio(1), subtitle(2), eng_audio(3)), which means
-                    // the second audio stream is at global index 3, not 2.
                     PmtStreamIndex = streamIndex,
                 });
             }
+            else if (isSubtitle)
+            {
+                var (language, isHI) = ParseDvbSubtitleDescriptor(descriptors);
+                subtitleStreams.Add(new SubtitleStreamInfo
+                {
+                    Pid = elementaryPid,
+                    Language = language,
+                    IsHearingImpaired = isHI,
+                });
+            }
 
-            // Count every stream type so the index matches ffmpeg's numbering exactly.
             streamIndex++;
             pos += esInfoLength;
         }
 
-        return new PmtInfo(serviceId, videoPid, audioStreams);
+        return new PmtInfo(serviceId, videoPid, audioStreams, subtitleStreams);
     }
 
     /// <summary>
-    /// Rebuilds a PMT section keeping only video and audio ES entries. Returns null if the
-    /// section is malformed or too large to fit in a single TS packet after stripping.
+    /// Rebuilds a PMT section reordering ES entries as: video → audio → subtitle, dropping
+    /// teletext, data, and other private streams. This guarantees that ffmpeg's global stream
+    /// indices are always video(0), audio(1..N), subtitle(N+1..) regardless of the broadcaster's
+    /// original PMT ordering, so Jellyfin's DefaultAudioStreamIndex+1 formula always lands on
+    /// the correct audio stream. Returns null if the section is malformed or too large.
     /// </summary>
-    public static byte[]? RebuildPmtWithAudioVideoOnly(ReadOnlySpan<byte> original)
+    public static byte[]? RebuildPmtReordered(ReadOnlySpan<byte> original)
     {
         if (original.Length < 12 || original[0] != TableIdPmt) return null;
 
@@ -118,7 +126,11 @@ public static class PmtParser
         int end = Math.Min(3 + sectionLength - 4, original.Length); // -4 to exclude existing CRC
         int programInfoLength = ((original[10] & 0x0F) << 8) | original[11];
 
-        var keepRanges = new List<(int start, int length)>();
+        // Three ordered buckets; final PMT order = video, then audio, then subtitle.
+        var videoRanges    = new List<(int start, int length)>();
+        var audioRanges    = new List<(int start, int length)>();
+        var subtitleRanges = new List<(int start, int length)>();
+
         int pos = 12 + programInfoLength;
         while (pos + 5 <= end)
         {
@@ -128,30 +140,37 @@ public static class PmtParser
             if (entryEnd > end) break;
 
             var descs = original.Slice(pos + 5, esInfoLength);
-            bool isVideo = VideoStreamTypes.Contains(streamType);
-            bool isAudio = AudioStreamTypes.Contains(streamType)
-                || (streamType == 0x06 && HasAc3Descriptor(descs));
-            if (isVideo || isAudio)
-                keepRanges.Add((pos, 5 + esInfoLength));
+            bool isVideo    = VideoStreamTypes.Contains(streamType);
+            bool isAudio    = AudioStreamTypes.Contains(streamType)
+                           || (streamType == 0x06 && HasAc3Descriptor(descs));
+            bool isSubtitle = !isAudio && streamType == 0x06 && HasDvbSubtitleDescriptor(descs);
+
+            if      (isVideo)    videoRanges.Add((pos, 5 + esInfoLength));
+            else if (isAudio)    audioRanges.Add((pos, 5 + esInfoLength));
+            else if (isSubtitle) subtitleRanges.Add((pos, 5 + esInfoLength));
+            // teletext, data, proprietary: dropped
 
             pos = entryEnd;
         }
 
         int esLoopLen = 0;
-        foreach (var (_, len) in keepRanges) esLoopLen += len;
+        foreach (var (_, len) in videoRanges)    esLoopLen += len;
+        foreach (var (_, len) in audioRanges)    esLoopLen += len;
+        foreach (var (_, len) in subtitleRanges) esLoopLen += len;
 
         // section_length = service_id(2)+version(1)+sec#(1)+last_sec#(1)+PCR_PID(2)+
-        //                  prog_info_len(2)+prog_info+es_loop+CRC32(4) = 9+prog_info+es+4
+        //                  prog_info_len(2)+prog_info+es_loop+CRC32(4)
         int newSectionLength = 9 + programInfoLength + esLoopLen + 4;
-        if (newSectionLength > 0x0FFF) return null; // sanity cap
+        if (newSectionLength > 0x0FFF) return null;
 
         var s = new byte[3 + newSectionLength];
         s[0] = original[0]; // table_id = 0x02
         s[1] = (byte)(0xB0 | (newSectionLength >> 8));
         s[2] = (byte)(newSectionLength & 0xFF);
-        original.Slice(3, 9 + programInfoLength).CopyTo(s.AsSpan(3)); // copy header+prog_info
+        original.Slice(3, 9 + programInfoLength).CopyTo(s.AsSpan(3));
         int w = 12 + programInfoLength;
-        foreach (var (start, length) in keepRanges)
+        foreach (var ranges in new[] { videoRanges, audioRanges, subtitleRanges })
+        foreach (var (start, length) in ranges)
         {
             original.Slice(start, length).CopyTo(s.AsSpan(w));
             w += length;
@@ -204,6 +223,42 @@ public static class PmtParser
             i += 2 + len;
         }
         return false;
+    }
+
+    private static bool HasDvbSubtitleDescriptor(ReadOnlySpan<byte> descs)
+    {
+        int i = 0;
+        while (i + 2 <= descs.Length)
+        {
+            if (descs[i] == 0x59) return true; // DVB Subtitling Descriptor
+            i += 2 + descs[i + 1];
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Reads the first DVB Subtitling Descriptor (tag 0x59) from a descriptor block.
+    /// Returns the language and whether the track is for hearing-impaired viewers.
+    /// DVB subtitling_type 0x20–0x2F signals hearing impaired; 0x10–0x1F is standard.
+    /// </summary>
+    private static (string Language, bool IsHearingImpaired) ParseDvbSubtitleDescriptor(ReadOnlySpan<byte> descs)
+    {
+        int i = 0;
+        while (i + 2 <= descs.Length)
+        {
+            int tag = descs[i];
+            int len = descs[i + 1];
+            // Each subtitling_info entry is 8 bytes; need at least one.
+            if (tag == 0x59 && len >= 8 && i + 2 + len <= descs.Length)
+            {
+                string lang = Encoding.ASCII.GetString(descs.Slice(i + 2, 3)).Trim().ToLowerInvariant();
+                byte subtitlingType = descs[i + 5];
+                bool isHI = subtitlingType is >= 0x20 and <= 0x2F;
+                return (lang, isHI);
+            }
+            i += 2 + len;
+        }
+        return ("eng", false);
     }
 
     /// <summary>
@@ -265,4 +320,23 @@ public sealed class AudioStreamInfo
 }
 
 /// <summary>Elementary stream PIDs resolved from a single service's PMT section.</summary>
-public sealed record PmtInfo(int ServiceId, int? VideoPid, IReadOnlyList<AudioStreamInfo> AudioStreams);
+public sealed record PmtInfo(
+    int ServiceId,
+    int? VideoPid,
+    IReadOnlyList<AudioStreamInfo> AudioStreams,
+    IReadOnlyList<SubtitleStreamInfo> SubtitleStreams);
+
+/// <summary>A DVB subtitle elementary stream discovered in a PMT section.</summary>
+public sealed class SubtitleStreamInfo
+{
+    public int Pid { get; init; }
+
+    /// <summary>ISO 639-2 language code, lower-case (e.g. "eng").</summary>
+    public string Language { get; init; } = "eng";
+
+    /// <summary>
+    /// True when DVB subtitling_type is in the 0x20–0x2F range (subtitles for the
+    /// hearing impaired), per EN 300 468 Table 26.
+    /// </summary>
+    public bool IsHearingImpaired { get; init; }
+}

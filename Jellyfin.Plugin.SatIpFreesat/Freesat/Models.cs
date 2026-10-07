@@ -46,6 +46,9 @@ public sealed class ServiceInfo
 
     /// <summary>All audio elementary streams resolved from this service's PMT during scan.</summary>
     public List<AudioStreamInfo> AudioStreams { get; set; } = [];
+
+    /// <summary>All DVB subtitle elementary streams resolved from this service's PMT during scan.</summary>
+    public List<SubtitleStreamInfo> SubtitleStreams { get; set; } = [];
 }
 
 /// <summary>A Freesat bouquet entry associating a service with an LCN.</summary>
@@ -87,6 +90,9 @@ public sealed class FreesatChannel
 
     /// <summary>All audio elementary streams resolved from this channel's PMT during scan.</summary>
     public IReadOnlyList<AudioStreamInfo> AudioStreams { get; init; } = [];
+
+    /// <summary>All DVB subtitle elementary streams resolved from this channel's PMT during scan.</summary>
+    public IReadOnlyList<SubtitleStreamInfo> SubtitleStreams { get; init; } = [];
 }
 
 /// <summary>Persisted result of a channel scan.</summary>

@@ -258,7 +258,7 @@ public sealed class SatIpStreamProxy : IAsyncDisposable
                     var section = ExtractSectionFromTsPacket(tsData.AsSpan(off, 188));
                     if (!section.IsEmpty)
                     {
-                        var cleanSection = PmtParser.RebuildPmtWithAudioVideoOnly(section);
+                        var cleanSection = PmtParser.RebuildPmtReordered(section);
                         if (cleanSection is not null)
                             _cleanPmtPacket = PmtParser.BuildPmtTsPacket(cleanSection, pmtPid);
                     }
