@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SatIpFreesat.Configuration;
@@ -86,49 +88,7 @@ public sealed class SatIpLiveStream : ILiveStream
             RequiresOpening = true,
             RequiresClosing = true,
             SupportsProbing = true,
-            MediaStreams =
-            [
-                new MediaStream
-                {
-                    Type = MediaStreamType.Video,
-                    Index = 0,
-                    IsDefault = true,
-                    // IsInterlaced hints Jellyfin's transcoder to apply a deinterlace filter.
-                    // Has no effect on direct-play paths (ffmpeg owns the connection there).
-                    IsInterlaced = cfg.ForceDeinterlace,
-                    // Freesat mandates MPEG-4 AVC across its entire platform (unlike Freeview,
-                    // it has never carried MPEG-2 video) at 8-bit 4:2:0, confirmed by direct
-                    // ffprobe/ffmpeg testing against the live RTSP source. Jellyfin's
-                    // EncodingHelper.GetQsvHwVidDecoder (and the VAAPI/NVENC equivalents)
-                    // require BOTH Codec and PixelFormat to be set before it will select a
-                    // hardware decoder; leaving them null forces software decode, which then
-                    // pairs with the QSV *encoder* down a code path that never inserts an
-                    // hwupload filter — the sw-decoded frames never reach the QSV encoder as
-                    // hardware surfaces, so hevc_qsv silently stalls encoding zero frames.
-                    Codec = "h264",
-                    PixelFormat = "yuv420p",
-                },
-                new MediaStream
-                {
-                    Type = MediaStreamType.Audio,
-                    Index = 1,
-                    IsDefault = true,
-                    Language = "eng",
-                    // Without a declared Channels count, EncodingHelper.GetNumAudioChannelsParam
-                    // (audioStream.Channels is null so its "clamp to input" branch never runs)
-                    // falls back to the client profile's max audio channels for the target codec
-                    // instead of the real source — against a Fire TV profile that meant ffmpeg
-                    // was told to transcode this channel's plain stereo MP2 audio into 8-channel
-                    // AAC. ffmpeg's ADTS muxer only supports up to 7 channels
-                    // (channelConfiguration > 7 is not supported in ADTS), so it failed outright
-                    // (exit code 183) on every single playback attempt on that client, while
-                    // direct-play clients (the web browser) never hit this transcode path at all.
-                    // Freesat's SD/HD channels are overwhelmingly plain stereo MP2/AAC; this is a
-                    // best-effort default, not a probe of the actual per-channel PMT audio
-                    // descriptor.
-                    Channels = 2,
-                },
-            ],
+            MediaStreams = BuildMediaStreams(channel, cfg),
         };
     }
 
@@ -159,19 +119,107 @@ public sealed class SatIpLiveStream : ILiveStream
 
     private static string BuildPids(FreesatChannel channel)
     {
-        // Request only PAT + this channel's PMT + its video (+ audio, if known) elementary
-        // streams. Requesting "pids=all" makes minisatip deliver the *entire* transponder —
-        // every channel sharing the mux, potentially 5+ programs and dozens of streams — which
-        // blows the probe budget and breaks the hardcoded MediaStream.Index=0/1 mapping above.
+        // Request only PAT + this channel's PMT + its video + all audio elementary streams.
+        // Requesting "pids=all" makes minisatip deliver the *entire* transponder — every channel
+        // sharing the mux, potentially 5+ programs and dozens of streams — which blows the probe
+        // budget and prevents ffmpeg from mapping the correct per-channel streams.
         if (channel.PmtPid is int pmtPid && channel.VideoPid is int videoPid)
         {
             var pids = $"0,{pmtPid},{videoPid}";
-            if (channel.AudioPid is int audioPid) pids += $",{audioPid}";
+            foreach (var audio in channel.AudioStreams)
+                pids += $",{audio.Pid}";
             return pids;
         }
 
         // Scan couldn't resolve this channel's PMT/PIDs (e.g. PAT/PMT collection timed out on a
         // busy mux) — fall back to the old behaviour rather than fail to play.
         return "all";
+    }
+
+    private static List<MediaStream> BuildMediaStreams(FreesatChannel channel, PluginConfiguration cfg)
+    {
+        var streams = new List<MediaStream>
+        {
+            new MediaStream
+            {
+                Type = MediaStreamType.Video,
+                Index = 0,
+                IsDefault = true,
+                // IsInterlaced hints Jellyfin's transcoder to apply a deinterlace filter.
+                // Has no effect on direct-play paths (ffmpeg owns the connection there).
+                IsInterlaced = cfg.ForceDeinterlace,
+                // Freesat mandates MPEG-4 AVC across its entire platform (unlike Freeview,
+                // it has never carried MPEG-2 video) at 8-bit 4:2:0, confirmed by direct
+                // ffprobe/ffmpeg testing against the live RTSP source. Jellyfin's
+                // EncodingHelper.GetQsvHwVidDecoder (and the VAAPI/NVENC equivalents)
+                // require BOTH Codec and PixelFormat to be set before it will select a
+                // hardware decoder; leaving them null forces software decode, which then
+                // pairs with the QSV *encoder* down a code path that never inserts an
+                // hwupload filter — the sw-decoded frames never reach the QSV encoder as
+                // hardware surfaces, so hevc_qsv silently stalls encoding zero frames.
+                Codec = "h264",
+                PixelFormat = "yuv420p",
+            },
+        };
+
+        // Sort non-AD tracks first so the main stereo audio is always the default (Index 1).
+        // AD tracks (DVB audio_type 0x03) are appended after the main track(s) as selectable
+        // alternatives. This ordering also determines the stream index ffmpeg sees at probe
+        // time, since all audio PIDs arrive in the TS and ffmpeg enumerates them in PID order
+        // (which matches PMT order, which matches our sort here: main before AD).
+        var orderedAudio = channel.AudioStreams
+            .OrderBy(a => a.IsAudioDescription ? 1 : 0)
+            .ToList();
+
+        if (orderedAudio.Count == 0)
+        {
+            // PMT audio not resolved — declare a generic stereo stream as a hint.
+            // Without a declared Channels count, EncodingHelper.GetNumAudioChannelsParam
+            // (audioStream.Channels is null so its "clamp to input" branch never runs)
+            // falls back to the client profile's max audio channels for the target codec
+            // instead of the real source — against a Fire TV profile that meant ffmpeg
+            // was told to transcode this channel's plain stereo MP2 audio into 8-channel
+            // AAC. ffmpeg's ADTS muxer only supports up to 7 channels
+            // (channelConfiguration > 7 is not supported in ADTS), so it failed outright
+            // (exit code 183) on every single playback attempt on that client.
+            streams.Add(new MediaStream
+            {
+                Type = MediaStreamType.Audio,
+                Index = 1,
+                IsDefault = true,
+                Language = "eng",
+                Channels = 2,
+            });
+        }
+        else
+        {
+            bool defaultAssigned = false;
+            for (int i = 0; i < orderedAudio.Count; i++)
+            {
+                var audio = orderedAudio[i];
+                bool isDefault = !audio.IsAudioDescription && !defaultAssigned;
+                if (isDefault) defaultAssigned = true;
+
+                streams.Add(new MediaStream
+                {
+                    Type = MediaStreamType.Audio,
+                    Index = 1 + i,
+                    IsDefault = isDefault,
+                    // Freesat's SD/HD channels are overwhelmingly plain stereo MP2/AAC; 2 is a
+                    // safe best-effort default. The same Channels=2 constraint that prevents the
+                    // 8-channel AAC transcode failure above applies to every audio track here.
+                    Channels = 2,
+                    Language = string.IsNullOrEmpty(audio.Language) ? "eng" : audio.Language,
+                    Title = audio.IsAudioDescription ? "Audio Description" : null,
+                });
+            }
+
+            // Safety: if every track is AD (unlikely) make the first one the default so
+            // playback doesn't start muted.
+            if (!defaultAssigned && streams.Count > 1)
+                streams[1].IsDefault = true;
+        }
+
+        return streams;
     }
 }
