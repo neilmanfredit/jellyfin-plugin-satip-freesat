@@ -10,7 +10,7 @@
     "versions": [
       {
         "version": "1.9.41.0",
-        "changelog": "chore: update manifest for v1.9.41 (backfill v1.9.40)",
+        "changelog": "feat: expose multiple audio streams (main + audio description) as selectable tracks; default to main stereo, not AD",
         "targetAbi": "12.0.0.0",
         "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.41/jellyfin-plugin-satip-freesat-v1.9.41-jellyfin12.zip",
         "checksum": "53ebf457f64168ace6f87b0fe291d36b",
@@ -18,7 +18,7 @@
       },
       {
         "version": "1.9.41.0",
-        "changelog": "chore: update manifest for v1.9.41 (backfill v1.9.40)",
+        "changelog": "feat: expose multiple audio streams (main + audio description) as selectable tracks; default to main stereo, not AD",
         "targetAbi": "10.9.0.0",
         "sourceUrl": "https://github.com/neilmanfredit/jellyfin-plugin-satip-freesat/releases/download/v1.9.41/jellyfin-plugin-satip-freesat-v1.9.41-jellyfin10.zip",
         "checksum": "0a08e44d8f423d99c40f002df248567e",
